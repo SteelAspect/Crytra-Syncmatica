@@ -40,6 +40,8 @@ warns in the log. What was removed, kept, renamed and added is listed in
   and holds **no Discord secrets**; the bot dials the server's game port
   through Cytra Link.
 
+**Just want to try it?** [SETUP.md](SETUP.md) has the ready-made jars (`release/`), a test schematic, the Discord application steps and a manual test script.
+
 ## Requirements
 
 | Side | Needs |
