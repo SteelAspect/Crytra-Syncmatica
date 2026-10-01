@@ -11,10 +11,11 @@ server opens no extra port. The exact messages are in
 What it does:
 
 - `/schematic list`, `/schematic info <name>`, `/schematic where <name>` (coordinates hidden when the server says so)
-- `/schematic materials <name> [missing_only]`: the shared list as an embed with a select menu to pick an item and buttons **+1 / +16 / +64 / Set… / Mark complete / Reset**, paging, and a missing-only toggle. Every press counts as *your* linked Minecraft player, with that player's in-game permissions; a refusal (not permitted, unknown item) is shown only to you.
+- `/schematic materials <name> [missing_only] [group]`: the shared list as an embed with a select menu to pick an item, a second select to filter by material group (Stone, Wood, Redstone, ...), buttons **+1 / +16 / +64 / Set… / Mark complete / Reset**, paging, and a missing-only toggle. Every press counts as *your* linked Minecraft player, with that player's in-game permissions; a refusal (not permitted, unknown item) is shown only to you.
+- `/schematic groups <name>`: progress per material group
 - `/materials <schematic> <item> <amount>`: quick add without the buttons
 - `/link <code>`, `/unlink`, `/whoami`, `/links`: account linking. In game, run `/cytra-syncmatica link` to get a one-time code.
-- A feed channel: shared schematics, item/schematic completions, and **one "materials" message per schematic that is edited in place** as the team gathers (also after a reconnect, via the mod's `resync`). Message ids are stored in SQLite so restarts keep editing the same messages.
+- A feed channel: shared schematics, item/group/schematic completions, and **one "materials" message per schematic that is edited in place** as the team gathers (also after a reconnect, via the mod's `resync`). Message ids are stored in SQLite so restarts keep editing the same messages.
 - A clear "Cytra-Syncmatica isn't installed on that server" message when the server has only Cytra Link (or an old one).
 
 ## Requirements
@@ -74,7 +75,7 @@ WantedBy=multi-user.target
 | `server.timeout` | `8.0` | seconds to wait for a reply |
 | `syncmatica.page_size` | `15` | items per page (max 25) |
 | `syncmatica.feed_edit` | `true` | edit one materials message per schematic in place |
-| `syncmatica.announce_item_completed` / `announce_schematic_completed` / `announce_schematic_shared` | `true` | feed posts |
+| `syncmatica.announce_item_completed` / `announce_group_completed` / `announce_schematic_completed` / `announce_schematic_shared` | `true` | feed posts |
 | `linking.enabled` | `true` | register `/link`, `/unlink`, `/whoami`, `/links` |
 | `linking.shared_db_path` | `""` | read-only fallback to a cytra-bridge database |
 | `database` | `syncmatica-bot.sqlite3` | this bot's SQLite file |

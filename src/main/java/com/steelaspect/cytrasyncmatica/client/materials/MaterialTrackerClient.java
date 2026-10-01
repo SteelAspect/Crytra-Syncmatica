@@ -11,6 +11,7 @@ import com.steelaspect.cytrasyncmatica.communication.FeatureSet;
 import com.steelaspect.cytrasyncmatica.communication.PacketType;
 import com.steelaspect.cytrasyncmatica.communication.ProtocolLimits;
 import com.steelaspect.cytrasyncmatica.materials.MaterialEntry;
+import com.steelaspect.cytrasyncmatica.materials.MaterialGroups;
 import com.steelaspect.cytrasyncmatica.materials.MaterialList;
 import com.steelaspect.cytrasyncmatica.materials.MaterialOp;
 import fi.dy.masa.litematica.data.DataManager;
@@ -268,6 +269,9 @@ public final class MaterialTrackerClient {
             localLists.put(schematic.key(), list);
         }
         list.applyRequirements(required);
+        final java.nio.file.Path groupsFile = java.nio.file.Path.of("config", Syncmatica.MOD_ID, MaterialGroups.FILE_NAME);
+        MaterialGroups.ensureTemplate(groupsFile);
+        MaterialGroups.assign(list, MaterialGroups.loadOverrides(groupsFile));
         store().save(schematic.key(), list);
         return list;
     }

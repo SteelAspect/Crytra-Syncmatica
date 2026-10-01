@@ -83,6 +83,16 @@ class Feed(commands.Cog):
         who = ui.player_text(payload.get("editor"))
         await self._send(content=f"✅ **{ui.item_name(item.get('item', '?'))}** for **{payload.get('schematic', '?')}** is complete ({item.get('required', '?'):,} gathered) · {who}")
 
+    async def ev_group_completed(self, payload: dict) -> None:
+        sid = payload.get("schematic_id")
+        if sid:
+            await self.refresh_materials_message(sid, payload.get("schematic"))
+        if not self.cfg.syncmatica.announce_group_completed:
+            return
+        g = payload.get("group") or {}
+        await self._send(content=f"📦 Group **{g.get('name', '?')}** for **{payload.get('schematic', '?')}** is complete "
+                                 f"({g.get('items', '?')} items, {g.get('required', 0):,} gathered) · {ui.player_text(payload.get('editor'))}")
+
     async def ev_schematic_completed(self, payload: dict) -> None:
         s = payload.get("schematic") or {}
         if s.get("id"):

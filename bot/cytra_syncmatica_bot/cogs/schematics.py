@@ -52,12 +52,15 @@ class MaterialsView(discord.ui.View):
     """Paged material list with an item select and edit buttons. State is re-fetched
     from the mod on every refresh so several people can use the same message."""
 
-    def __init__(self, bot: SyncmaticaBot, schematic_id: str, schematic_name: str, missing_only: bool, page: int = 0):
+    def __init__(self, bot: SyncmaticaBot, schematic_id: str, schematic_name: str, missing_only: bool, page: int = 0,
+                 group: str | None = None):
         super().__init__(timeout=VIEW_TIMEOUT)
         self.bot = bot
         self.schematic_id = schematic_id
         self.schematic_name = schematic_name
         self.missing_only = missing_only
+        self.group = group or None
+        self.groups: list[dict] = []
         self.page = page
         self.pages = 1
         self.items: list[dict] = []
@@ -70,8 +73,15 @@ class MaterialsView(discord.ui.View):
         return self.bot.cfg.syncmatica.page_size
 
     async def fetch(self) -> None:
-        out = await self.bot.ext("get_materials", {"schematic_id": self.schematic_id, "missing_only": self.missing_only,
-                                                   "offset": self.page * self.page_size, "limit": self.page_size})
+        req = {"schematic_id": self.schematic_id, "missing_only": self.missing_only,
+               "offset": self.page * self.page_size, "limit": self.page_size}
+        if self.group:
+            req["group"] = self.group
+        out = await self.bot.ext("get_materials", req)
+        try:
+            self.groups = list((await self.bot.ext("get_groups", {"schematic_id": self.schematic_id})).get("groups") or [])
+        except LinkError:
+            self.groups = []
         self.items = list(out.get("items") or [])
         self.summary = out.get("summary") or {}
         self.schematic_name = out.get("schematic", self.schematic_name)
@@ -85,7 +95,7 @@ class MaterialsView(discord.ui.View):
 
     def embed(self) -> discord.Embed:
         return ui.materials_embed(self.schematic_name, self.bot.cfg.server.name, self.summary, self.items,
-                                 self.page + 1, self.pages, self.missing_only)
+                                 self.page + 1, self.pages, self.missing_only, group=self.group)
 
     def _rebuild(self) -> None:
         self.clear_items()
@@ -97,16 +107,26 @@ class MaterialsView(discord.ui.View):
         select.callback = self._on_select
         select.disabled = not self.items
         self.add_item(select)
+        if self.groups:
+            options = [discord.SelectOption(label="All groups", value="*", default=self.group is None)]
+            for g in self.groups[:24]:
+                options.append(discord.SelectOption(
+                    label=g["name"][:100], value=g["name"][:100], default=g["name"] == self.group,
+                    description=f"{g['gathered']}/{g['required']} gathered · {g['items']} items"[:100],
+                    emoji="✅" if g.get("complete") else None))
+            group_select = discord.ui.Select(placeholder="Filter by group…", min_values=1, max_values=1, row=1, options=options)
+            group_select.callback = self._on_group
+            self.add_item(group_select)
         has = self.selected is not None
         for label, action, amount in (("+1", "add", 1), ("+16", "add", 16), ("+64", "add", 64)):
-            self.add_item(self._button(label, discord.ButtonStyle.secondary, 1, not has, lambda i, a=action, n=amount: self.act(i, a, amount=n)))
-        self.add_item(self._button("Set…", discord.ButtonStyle.primary, 1, not has, self._on_set))
-        self.add_item(self._button("Mark complete", discord.ButtonStyle.success, 2, not has, lambda i: self.act(i, "done")))
-        self.add_item(self._button("Reset", discord.ButtonStyle.danger, 2, not has, lambda i: self.act(i, "reset")))
-        self.add_item(self._button("◀", discord.ButtonStyle.secondary, 3, self.page <= 0, lambda i: self._turn(i, -1)))
-        self.add_item(self._button("▶", discord.ButtonStyle.secondary, 3, self.page >= self.pages - 1, lambda i: self._turn(i, 1)))
-        self.add_item(self._button("Missing only" if not self.missing_only else "Show all", discord.ButtonStyle.secondary, 3, False, self._toggle_missing))
-        self.add_item(self._button("Refresh", discord.ButtonStyle.secondary, 3, False, self._refresh))
+            self.add_item(self._button(label, discord.ButtonStyle.secondary, 2, not has, lambda i, a=action, n=amount: self.act(i, a, amount=n)))
+        self.add_item(self._button("Set…", discord.ButtonStyle.primary, 2, not has, self._on_set))
+        self.add_item(self._button("Mark complete", discord.ButtonStyle.success, 3, not has, lambda i: self.act(i, "done")))
+        self.add_item(self._button("Reset", discord.ButtonStyle.danger, 3, not has, lambda i: self.act(i, "reset")))
+        self.add_item(self._button("◀", discord.ButtonStyle.secondary, 4, self.page <= 0, lambda i: self._turn(i, -1)))
+        self.add_item(self._button("▶", discord.ButtonStyle.secondary, 4, self.page >= self.pages - 1, lambda i: self._turn(i, 1)))
+        self.add_item(self._button("Missing only" if not self.missing_only else "Show all", discord.ButtonStyle.secondary, 4, False, self._toggle_missing))
+        self.add_item(self._button("Refresh", discord.ButtonStyle.secondary, 4, False, self._refresh))
 
     @staticmethod
     def _button(label, style, row, disabled, callback):
@@ -119,6 +139,13 @@ class MaterialsView(discord.ui.View):
         self.selected = values[0] if values else None
         self._rebuild()
         await interaction.response.edit_message(embed=self.embed(), view=self)
+
+    async def _on_group(self, interaction: discord.Interaction) -> None:
+        values = interaction.data.get("values") if interaction.data else None
+        chosen = values[0] if values else "*"
+        self.group = None if chosen == "*" else chosen
+        self.page = 0
+        await self._refresh(interaction)
 
     async def _on_set(self, interaction: discord.Interaction) -> None:
         if not self.selected:
@@ -221,14 +248,25 @@ class Schematics(commands.Cog):
         await interaction.followup.send(embed=ui.schematic_embed(s, self.cfg.server.name), allowed_mentions=ui.NO_MENTIONS)
 
     @schematic.command(name="materials", description="The shared material list, with buttons to update counts")
-    @app_commands.describe(name="Schematic name", missing_only="Show only items that are not complete")
+    @app_commands.describe(name="Schematic name", missing_only="Show only items that are not complete",
+                           group="Show only one material group (Stone, Wood, ...)")
     @app_commands.autocomplete(name=schematic_autocomplete)
-    async def materials(self, interaction: discord.Interaction, name: str, missing_only: bool = False) -> None:
+    async def materials(self, interaction: discord.Interaction, name: str, missing_only: bool = False, group: str | None = None) -> None:
         await interaction.response.defer()
         s = await self._find(name)
-        view = MaterialsView(self.bot, s["id"], s["name"], missing_only)
+        view = MaterialsView(self.bot, s["id"], s["name"], missing_only, group=group)
         await view.fetch()
         view.message = await interaction.followup.send(embed=view.embed(), view=view, allowed_mentions=ui.NO_MENTIONS, wait=True)
+
+    @schematic.command(name="groups", description="Progress per material group (Stone, Wood, Redstone, ...)")
+    @app_commands.describe(name="Schematic name")
+    @app_commands.autocomplete(name=schematic_autocomplete)
+    async def groups(self, interaction: discord.Interaction, name: str) -> None:
+        await interaction.response.defer()
+        out = await self.bot.ext("get_groups", {"schematic": name})
+        await interaction.followup.send(embed=ui.groups_embed(out.get("schematic", name), self.cfg.server.name,
+                                                              out.get("summary") or {}, list(out.get("groups") or [])),
+                                        allowed_mentions=ui.NO_MENTIONS)
 
     @schematic.command(name="where", description="Dimension and coordinates of a shared schematic")
     @app_commands.describe(name="Schematic name")

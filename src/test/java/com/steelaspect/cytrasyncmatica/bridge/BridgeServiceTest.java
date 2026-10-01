@@ -146,8 +146,13 @@ final class BridgeServiceTest {
 
             final MaterialList list = new MaterialList();
             list.put(stone);
-            bridge.onSchematicCompleted(p, list, alex); // forces a flush first
-            assertEquals(List.of("item_changed", "schematic_completed"), sink.types);
+            bridge.onGroupCompleted(p, list.group("Other"), alex); // forces a flush first
+            bridge.onSchematicCompleted(p, list, alex);
+            assertEquals(List.of("item_changed", "group_completed", "schematic_completed"), sink.types);
+            final JsonObject groupEvent = sink.payloads.get(1);
+            assertEquals("Other", groupEvent.getAsJsonObject("group").get("name").getAsString());
+            assertEquals(1, groupEvent.getAsJsonObject("group").get("items").getAsInt());
+            assertEquals("Alex", groupEvent.getAsJsonObject("editor").get("name").getAsString());
             final JsonObject batch = sink.payloads.get(0);
             assertEquals("farm", batch.get("schematic").getAsString());
             assertEquals(1, batch.getAsJsonArray("changes").size(), "two edits of one item collapse into one change");

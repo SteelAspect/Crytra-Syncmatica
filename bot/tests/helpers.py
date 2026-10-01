@@ -45,16 +45,31 @@ class FakeSyncmaticaExtension:
         self.actions: list[dict] = []
         self.hide_coordinates = False
 
+    GROUPS = {"minecraft:stone": "Stone", "minecraft:oak_planks": "Wood", "minecraft:oak_door": "Wood",
+              "minecraft:stone_slab": "Stone", "minecraft:glass": "Glass"}
+
     def summary(self):
         req = sum(r for r, _ in self.items.values())
         got = sum(min(g, r) for r, g in self.items.values())
         return {"available": True, "items": len(self.items), "required": req, "gathered": got, "remaining": req - got,
-                "percent": round(100.0 * got / req, 1) if req else 100.0, "complete": got >= req}
+                "percent": round(100.0 * got / req, 1) if req else 100.0, "complete": got >= req,
+                "groups": len(set(self.GROUPS.values()))}
 
     def entry(self, item):
         req, got = self.items[item]
         return {"item": item, "required": req, "gathered": got, "remaining": max(0, req - got), "complete": got >= req,
-                "stack_size": 64, "remaining_text": str(max(0, req - got)), "editor": None, "edited_at": 0}
+                "group": self.GROUPS[item], "stack_size": 64, "remaining_text": str(max(0, req - got)), "editor": None,
+                "edited_at": 0}
+
+    def groups(self):
+        out = []
+        for name in ("Stone", "Wood", "Glass"):
+            members = [i for i, g in self.GROUPS.items() if g == name]
+            req = sum(self.items[i][0] for i in members)
+            got = sum(min(self.items[i][1], self.items[i][0]) for i in members)
+            out.append({"name": name, "items": len(members), "required": req, "gathered": got, "remaining": req - got,
+                        "percent": round(100.0 * got / req, 1) if req else 100.0, "complete": got >= req})
+        return out
 
     def schematic(self):
         s = {"id": SCHEMATIC_ID, "name": "Iron farm", "file_name": "iron_farm", "owner": {"uuid": OP_UUID, "name": "OpPlayer"},
@@ -72,7 +87,7 @@ class FakeSyncmaticaExtension:
                     "coordinates_hidden": self.hide_coordinates, "queued_events": 0, "ops": ["ping"]}
         if op == "list_schematics":
             return {"schematics": [self.schematic()]}
-        if op in ("get_schematic", "get_materials", "get_where", "material_action"):
+        if op in ("get_schematic", "get_materials", "get_groups", "get_where", "material_action"):
             name = payload.get("schematic"); sid = payload.get("schematic_id")
             if sid not in (None, SCHEMATIC_ID) or (name not in (None, "Iron farm", "iron_farm")):
                 raise ExtensionError(f"unknown schematic {name or sid}")
@@ -88,10 +103,14 @@ class FakeSyncmaticaExtension:
             entries = [self.entry(i) for i in self.items]
             if payload.get("missing_only"):
                 entries = [e for e in entries if not e["complete"]]
+            if payload.get("group"):
+                entries = [e for e in entries if e["group"].lower() == payload["group"].lower()]
             entries.sort(key=lambda e: -e["remaining"])
             off, lim = int(payload.get("offset", 0)), int(payload.get("limit", 50))
             return {"schematic_id": SCHEMATIC_ID, "schematic": "Iron farm", "summary": self.summary(), "total": len(entries),
                     "offset": off, "limit": lim, "items": entries[off:off + lim]}
+        if op == "get_groups":
+            return {"schematic_id": SCHEMATIC_ID, "schematic": "Iron farm", "summary": self.summary(), "groups": self.groups()}
         if op == "material_action":
             self.actions.append(payload)
             uuid, item, action = payload.get("mc_uuid"), payload.get("item"), payload.get("action")

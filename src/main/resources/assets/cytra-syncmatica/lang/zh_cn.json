@@ -133,5 +133,7 @@
   "cytra-syncmatica.gui.label.hotkey.material_tracker": "Open material tracker",
   "cytra-syncmatica.hotkey.open_material_tracker.comment": "Opens the team material tracker",
   "cytra-syncmatica.gui.label.hotkey.material_hud": "Toggle material HUD",
-  "cytra-syncmatica.hotkey.toggle_material_hud.comment": "Shows or hides the pinned-materials overlay"
+  "cytra-syncmatica.hotkey.toggle_material_hud.comment": "Shows or hides the pinned-materials overlay",
+  "cytra-syncmatica.gui.button.group": "Group: %s",
+  "cytra-syncmatica.gui.label.group.all": "All"
 }

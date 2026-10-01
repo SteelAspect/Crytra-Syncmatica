@@ -261,6 +261,16 @@ public class BridgeService extends AbstractService implements MaterialEventListe
     }
 
     @Override
+    public void onGroupCompleted(final ServerPlacement placement, final MaterialList.GroupTotals group, final PlayerIdentifier editor) {
+        flushBatches(true);
+        final JsonObject o = new JsonObject();
+        o.addProperty("schematic_id", placement.getId().toString());
+        o.addProperty("schematic", placement.getName());
+        o.add("group", group.toJson());
+        o.add("editor", BridgeJson.player(editor));
+        publish("group_completed", o);
+    }
+
     public void onSchematicCompleted(final ServerPlacement placement, final MaterialList list, final PlayerIdentifier editor) {
         flushBatches(true);
         final JsonObject o = schematicPayload(placement);

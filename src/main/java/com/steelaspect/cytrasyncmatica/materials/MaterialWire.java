@@ -23,6 +23,7 @@ public final class MaterialWire {
             buf.writeString(e.getEditorName(), ProtocolLimits.MAX_PLAYER_NAME_LENGTH);
         }
         buf.writeLong(e.getEditedAt());
+        buf.writeString(e.getGroup(), MaterialGroups.MAX_GROUP_NAME);
     }
 
     public static MaterialEntry readEntry(final PacketByteBuf buf) {
@@ -36,8 +37,10 @@ public final class MaterialWire {
             name = buf.readString(ProtocolLimits.MAX_PLAYER_NAME_LENGTH);
         }
         final long at = buf.readLong();
+        final String group = buf.readString(MaterialGroups.MAX_GROUP_NAME);
         final MaterialEntry e = new MaterialEntry(itemId, required);
         e.setGathered(gathered, editor, name, at);
+        e.setGroup(group);
         return e;
     }
 

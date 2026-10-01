@@ -122,6 +122,8 @@ public final class CytraLinkBridge implements LinkExtension, BridgeSink {
                 return done(getSchematic(context, payload));
             case "get_materials":
                 return done(getMaterials(context, payload));
+            case "get_groups":
+                return done(getGroups(context, payload));
             case "get_where":
                 return done(getWhere(context, payload));
             case "material_action":
@@ -148,7 +150,7 @@ public final class CytraLinkBridge implements LinkExtension, BridgeSink {
         o.addProperty("coordinates_hidden", context.getBridge().isHideCoordinates());
         o.addProperty("queued_events", context.getBridge().queuedEvents());
         final JsonArray ops = new JsonArray();
-        for (final String s : new String[] {"ping", "list_schematics", "get_schematic", "get_materials", "get_where", "material_action", "link_claim"}) {
+        for (final String s : new String[] {"ping", "list_schematics", "get_schematic", "get_materials", "get_groups", "get_where", "material_action", "link_claim"}) {
             ops.add(s);
         }
         o.add("ops", ops);
@@ -202,6 +204,10 @@ public final class CytraLinkBridge implements LinkExtension, BridgeSink {
         if (missingOnly) {
             entries.removeIf(MaterialEntry::isComplete);
         }
+        final String group = str(payload, "group", "");
+        if (!group.isBlank()) {
+            entries.removeIf(e -> !e.getGroup().equalsIgnoreCase(group.trim()));
+        }
         final JsonArray items = new JsonArray();
         for (int i = offset; i < entries.size() && items.size() < limit; i++) {
             items.add(BridgeJson.entry(entries.get(i)));
@@ -213,8 +219,32 @@ public final class CytraLinkBridge implements LinkExtension, BridgeSink {
         o.addProperty("total", entries.size());
         o.addProperty("offset", offset);
         o.addProperty("limit", limit);
+        if (!group.isBlank()) {
+            o.addProperty("group", group.trim());
+        }
         o.add("items", items);
         return o;
+    }
+
+    private JsonObject getGroups(final Context context, final JsonObject payload) {
+        final ServerPlacement p = requirePlacement(context, payload);
+        final MaterialList list = requireList(context, p);
+        final JsonObject o = new JsonObject();
+        o.addProperty("schematic_id", p.getId().toString());
+        o.addProperty("schematic", p.getName());
+        o.add("summary", BridgeJson.summary(list));
+        o.add("groups", BridgeJson.groups(list));
+        return o;
+    }
+
+    private static MaterialList requireList(final Context context, final ServerPlacement p) {
+        final MaterialTrackingService materials = context.getMaterialTracking();
+        final MaterialList list = materials == null ? null : materials.getList(p);
+        if (list == null) {
+            final String error = materials == null ? "material tracking is disabled" : materials.getExtractionError(p.getId());
+            throw new IllegalStateException(error == null ? "no material list yet for " + p.getName() : error);
+        }
+        return list;
     }
 
     private JsonObject getWhere(final Context context, final JsonObject payload) {

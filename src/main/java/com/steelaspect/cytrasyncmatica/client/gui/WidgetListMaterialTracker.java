@@ -52,6 +52,10 @@ public class WidgetListMaterialTracker extends WidgetListBase<MaterialEntry, Wid
         if (MaterialTrackerPreferences.isHideCompleted()) {
             entries.removeIf(MaterialEntry::isComplete);
         }
+        final String group = parent.getGroup();
+        if (group != null) {
+            entries.removeIf(e -> !e.getGroup().equalsIgnoreCase(group));
+        }
         final Comparator<MaterialEntry> byName = Comparator.comparing(e -> WidgetMaterialTrackerEntry.displayName(e.getItemId()), String.CASE_INSENSITIVE_ORDER);
         if (MaterialTrackerPreferences.getSortMode() == MaterialTrackerPreferences.SortMode.NAME) {
             entries.sort(byName);
@@ -68,8 +72,9 @@ public class WidgetListMaterialTracker extends WidgetListBase<MaterialEntry, Wid
 
     @Override
     protected List<String> getEntryStringsForFilter(final MaterialEntry entry) {
-        final List<String> filter = new ArrayList<>(2);
+        final List<String> filter = new ArrayList<>(3);
         filter.add(entry.getItemId().toLowerCase());
+        filter.add(entry.getGroup().toLowerCase());
         filter.add(WidgetMaterialTrackerEntry.displayName(entry.getItemId()).toLowerCase());
         return filter;
     }

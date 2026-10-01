@@ -86,7 +86,18 @@ public final class BridgeJson {
         m.addProperty("remaining", list.totalRemaining());
         m.addProperty("percent", Math.round(list.percentComplete() * 10.0) / 10.0);
         m.addProperty("complete", list.isComplete());
+        m.addProperty("groups", list.groups().size());
         return m;
+    }
+
+    public static JsonArray groups(final MaterialList list) {
+        final JsonArray arr = new JsonArray();
+        if (list != null) {
+            for (final MaterialList.GroupTotals g : list.groups()) {
+                arr.add(g.toJson());
+            }
+        }
+        return arr;
     }
 
     public static JsonObject entry(final MaterialEntry e) {
@@ -96,6 +107,7 @@ public final class BridgeJson {
         o.addProperty("gathered", e.getGathered());
         o.addProperty("remaining", e.getRemaining());
         o.addProperty("complete", e.isComplete());
+        o.addProperty("group", e.getGroup());
         final int stack = MaterialTrackingService.stackSizeOf(e.getItemId());
         o.addProperty("stack_size", stack);
         o.addProperty("remaining_text", StackFormat.format(e.getRemaining(), stack));

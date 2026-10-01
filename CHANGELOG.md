@@ -115,6 +115,16 @@ config, the UI, the lang files, the docs and the build:
   centre (click to copy), size, and distance from the player when in the same
   dimension. With `sharing.hide_coordinates_without_permission` on, players
   without `cytra-syncmatica.where` (fallback allowed) only see the dimension.
+- Material groups (Step 3.1): every item belongs to a group (Stone, Wood,
+  Glass, Redstone, Lighting, Metal, Nether & End, Terrain, Decoration,
+  Liquids, Other) from a built-in mapping, overridable per item in
+  `config/cytra-syncmatica/groups.json` (server for shared lists; the same
+  file on the client for client-only and singleplayer lists). The material
+  screen has a "Group" button that cycles through the groups and shows the
+  group's progress; the search box also matches group names; exports carry a
+  `group` column. Bridge: `get_groups`, a `group` filter on `get_materials`,
+  `group` on every item, a `group_completed` event.
 - Standalone Discord bot in `bot/` (own application, config, SQLite):
   `/link`, `/unlink`, `/whoami`, `/links`, `/schematic list|info|materials|where`,
-  `/materials`, live feed channel.
+  `/schematic groups`, `/materials`, a group filter in the materials view,
+  live feed channel.

@@ -19,6 +19,10 @@ public interface MaterialEventListener {
     default void onItemCompleted(ServerPlacement placement, MaterialEntry entry, PlayerIdentifier editor) {
     }
 
+    /** Every item of {@code group} is now complete (fired once per edit that completes it). */
+    default void onGroupCompleted(ServerPlacement placement, MaterialList.GroupTotals group, PlayerIdentifier editor) {
+    }
+
     default void onSchematicCompleted(ServerPlacement placement, MaterialList list, PlayerIdentifier editor) {
     }
 }

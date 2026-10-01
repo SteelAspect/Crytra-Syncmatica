@@ -19,6 +19,7 @@ public final class MaterialEntry {
     private UUID editorUuid;
     private String editorName = UNKNOWN_EDITOR;
     private long editedAt;
+    private String group = MaterialGroups.OTHER;
 
     public MaterialEntry(final String itemId, final int required) {
         this.itemId = itemId;
@@ -69,12 +70,22 @@ public final class MaterialEntry {
         return editedAt;
     }
 
+    /** The material group ("Stone", "Wood", ...); never null or empty. */
+    public String getGroup() {
+        return group;
+    }
+
+    public void setGroup(final String group) {
+        this.group = MaterialGroups.clean(group);
+    }
+
     public MaterialEntry copy() {
         final MaterialEntry copy = new MaterialEntry(itemId, required);
         copy.gathered = gathered;
         copy.editorUuid = editorUuid;
         copy.editorName = editorName;
         copy.editedAt = editedAt;
+        copy.group = group;
         return copy;
     }
 
@@ -92,6 +103,7 @@ public final class MaterialEntry {
         if (editedAt > 0L) {
             o.addProperty("edited_at", editedAt);
         }
+        o.addProperty("group", group);
         return o;
     }
 
@@ -111,6 +123,9 @@ public final class MaterialEntry {
         e.setGathered(o.has("gathered") ? o.get("gathered").getAsInt() : 0, uuid,
                 o.has("editor_name") ? o.get("editor_name").getAsString() : UNKNOWN_EDITOR,
                 o.has("edited_at") ? o.get("edited_at").getAsLong() : 0L);
+        if (o.has("group")) {
+            e.setGroup(o.get("group").getAsString());
+        }
         return e;
     }
 }

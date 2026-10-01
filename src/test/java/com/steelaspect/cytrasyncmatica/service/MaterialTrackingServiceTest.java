@@ -1,6 +1,7 @@
 package com.steelaspect.cytrasyncmatica.service;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
@@ -153,10 +154,17 @@ final class MaterialTrackingServiceTest {
                 }
 
                 @Override
+                public void onGroupCompleted(final ServerPlacement p, final MaterialList.GroupTotals g, final PlayerIdentifier who) {
+                    events.add("group_complete:" + g.name());
+                }
+
+                @Override
                 public void onSchematicCompleted(final ServerPlacement p, final MaterialList l, final PlayerIdentifier who) {
                     events.add("schematic_complete");
                 }
             });
+            Files.createDirectories(materials.groupsFile().getParent());
+            Files.writeString(materials.groupsFile(), "{\"overrides\": {\"minecraft:stone_slab\": \"Floor\"}}");
             final UUID hash = writeLitematic(context);
             final ServerPlacement placement = new ServerPlacement(UUID.randomUUID(), "farm", hash, PlayerIdentifier.MISSING_PLAYER);
             placement.move("minecraft:overworld", BlockPos.ORIGIN, BlockRotation.NONE, BlockMirror.NONE);
@@ -170,6 +178,9 @@ final class MaterialTrackingServiceTest {
             assertNotNull(list);
             assertEquals(20, list.get("minecraft:stone").getRequired());
             assertTrue(events.contains("created"));
+            assertEquals("Stone", list.get("minecraft:stone").getGroup());
+            assertEquals("Wood", list.get("minecraft:oak_door").getGroup());
+            assertEquals("Floor", list.get("minecraft:stone_slab").getGroup(), "groups.json override applied");
 
             final PlayerIdentifier alex = context.getPlayerIdentifierProvider().createOrGet(UUID.randomUUID(), "Alex");
             assertEquals(MaterialTrackingService.Outcome.OK, materials.apply(placement, "minecraft:stone", MaterialOp.ADD, 16, alex));
@@ -179,8 +190,12 @@ final class MaterialTrackingServiceTest {
             assertEquals(MaterialTrackingService.Outcome.UNKNOWN_ITEM, materials.apply(placement, "minecraft:bedrock", MaterialOp.ADD, 1, alex));
             assertEquals(MaterialTrackingService.Outcome.OK, materials.apply(placement, "minecraft:stone", MaterialOp.DONE, 0, alex));
             assertTrue(events.contains("completed:minecraft:stone"));
+            assertTrue(events.contains("group_complete:Stone"), events.toString());
             materials.apply(placement, "minecraft:oak_door", MaterialOp.SET, 1, alex);
+            assertTrue(events.contains("group_complete:Wood"), events.toString());
+            assertFalse(events.contains("schematic_complete"), events.toString());
             materials.apply(placement, "minecraft:stone_slab", MaterialOp.SET, 2, alex);
+            assertTrue(events.contains("group_complete:Floor"), events.toString());
             assertTrue(events.contains("schematic_complete"), events.toString());
             assertEquals(MaterialTrackingService.Outcome.OK, materials.apply(placement, "minecraft:stone", MaterialOp.RESET, 0, alex));
             assertEquals(0, list.get("minecraft:stone").getGathered());
@@ -190,8 +205,8 @@ final class MaterialTrackingServiceTest {
             final List<Path> files = materials.export(placement, exports).get();
             assertEquals(2, files.size());
             final String csv = Files.readString(files.get(0));
-            assertTrue(csv.startsWith("item,required,gathered,remaining,last_edited_by,last_edited_at"), csv);
-            assertTrue(csv.contains("minecraft:stone,20,0,20,Alex,"), csv);
+            assertTrue(csv.startsWith("item,group,required,gathered,remaining,last_edited_by,last_edited_at"), csv);
+            assertTrue(csv.contains("minecraft:stone,Stone,20,0,20,Alex,"), csv);
             final String txt = Files.readString(files.get(1));
             assertTrue(txt.contains("Materials for farm"), txt);
             assertTrue(txt.contains("minecraft:stone"), txt);

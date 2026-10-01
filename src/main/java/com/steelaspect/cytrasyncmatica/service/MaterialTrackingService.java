@@ -10,6 +10,7 @@ import com.steelaspect.cytrasyncmatica.communication.ServerCommunicationManager;
 import com.steelaspect.cytrasyncmatica.extended_core.PlayerIdentifier;
 import com.steelaspect.cytrasyncmatica.materials.MaterialEntry;
 import com.steelaspect.cytrasyncmatica.materials.MaterialEventListener;
+import com.steelaspect.cytrasyncmatica.materials.MaterialGroups;
 import com.steelaspect.cytrasyncmatica.materials.MaterialList;
 import com.steelaspect.cytrasyncmatica.materials.MaterialListExtractor;
 import com.steelaspect.cytrasyncmatica.materials.MaterialOp;
@@ -134,6 +135,7 @@ public class MaterialTrackingService extends AbstractService {
             return t;
         });
         started = true;
+        MaterialGroups.ensureTemplate(groupsFile());
     }
 
     @Override
@@ -190,13 +192,21 @@ public class MaterialTrackingService extends AbstractService {
         final long maxBlocks = maxSchematicBlocks;
         final UUID id = placement.getId();
         final MaterialListExtractor.BlockItemResolver r = resolver;
+        final Path overridesFile = groupsFile();
         runIo(() -> {
             final MaterialListExtractor.Result result = MaterialListExtractor.extract(litematic, maxBlocks, 64L * 1024L * 1024L, r);
-            onServerThread(() -> applyExtraction(id, result));
+            final Map<String, String> overrides = MaterialGroups.loadOverrides(overridesFile);
+            onServerThread(() -> applyExtraction(id, result, overrides));
         });
     }
 
-    private void applyExtraction(final UUID id, final MaterialListExtractor.Result result) {
+    /** {@code config/cytra-syncmatica/groups.json}: per-item group overrides, re-read at every extraction. */
+    public Path groupsFile() {
+        final File cfg = context == null ? null : context.getConfigFolder();
+        return cfg == null ? null : new File(cfg, MaterialGroups.FILE_NAME).toPath();
+    }
+
+    private void applyExtraction(final UUID id, final MaterialListExtractor.Result result, final Map<String, String> groupOverrides) {
         final ServerPlacement placement = context.getSyncmaticManager().getPlacement(id);
         if (placement == null) {
             return;
@@ -209,6 +219,7 @@ public class MaterialTrackingService extends AbstractService {
         extractionErrors.remove(id);
         final MaterialList list = lists.computeIfAbsent(id, k -> new MaterialList());
         list.applyRequirements(result.requirements);
+        MaterialGroups.assign(list, groupOverrides);
         stats.put(id, result.stats);
         save(id);
         broadcastList(placement);
@@ -264,6 +275,7 @@ public class MaterialTrackingService extends AbstractService {
             default -> target = old;
         }
         final boolean wasComplete = list.isComplete();
+        final boolean groupWasComplete = list.isGroupComplete(entry.getGroup());
         final long now = System.currentTimeMillis();
         entry.setGathered(target, editor == null ? null : editor.uuid, editor == null ? "" : editor.getName(), now);
         if (entry.getGathered() == old) {
@@ -277,6 +289,12 @@ public class MaterialTrackingService extends AbstractService {
             l.onItemChanged(placement, entry, old, editor, op);
             if (entry.isComplete() && old < entry.getRequired()) {
                 l.onItemCompleted(placement, entry, editor);
+            }
+        }
+        if (!groupWasComplete && list.isGroupComplete(entry.getGroup())) {
+            final MaterialList.GroupTotals group = list.group(entry.getGroup());
+            for (final MaterialEventListener l : listeners) {
+                l.onGroupCompleted(placement, group, editor);
             }
         }
         if (!wasComplete && list.isComplete()) {
@@ -380,9 +398,10 @@ public class MaterialTrackingService extends AbstractService {
     }
 
     public static String toCsv(final List<MaterialEntry> entries) {
-        final StringBuilder sb = new StringBuilder("item,required,gathered,remaining,last_edited_by,last_edited_at\n");
+        final StringBuilder sb = new StringBuilder("item,group,required,gathered,remaining,last_edited_by,last_edited_at\n");
         for (final MaterialEntry e : entries) {
-            sb.append(e.getItemId()).append(',').append(e.getRequired()).append(',').append(e.getGathered()).append(',')
+            sb.append(e.getItemId()).append(',').append(csvEscape(e.getGroup())).append(',').append(e.getRequired()).append(',')
+                    .append(e.getGathered()).append(',')
                     .append(e.getRemaining()).append(',').append(csvEscape(e.getEditorName())).append(',')
                     .append(e.getEditedAt()).append('\n');
         }
@@ -398,10 +417,10 @@ public class MaterialTrackingService extends AbstractService {
             got += Math.min(e.getGathered(), e.getRequired());
         }
         sb.append(String.format(java.util.Locale.ROOT, "%d / %d items gathered (%.1f%%)%n%n", got, req, req == 0 ? 100.0 : 100.0 * got / req));
-        sb.append(String.format(java.util.Locale.ROOT, "%-40s %10s %10s %10s  %s%n", "item", "required", "gathered", "remaining", "remaining (shulkers/stacks)"));
+        sb.append(String.format(java.util.Locale.ROOT, "%-40s %-14s %10s %10s %10s  %s%n", "item", "group", "required", "gathered", "remaining", "remaining (shulkers/stacks)"));
         for (final MaterialEntry e : entries) {
             final int stack = stackSizes.getOrDefault(e.getItemId(), 64);
-            sb.append(String.format(java.util.Locale.ROOT, "%-40s %10d %10d %10d  %s%n", e.getItemId(), e.getRequired(),
+            sb.append(String.format(java.util.Locale.ROOT, "%-40s %-14s %10d %10d %10d  %s%n", e.getItemId(), e.getGroup(), e.getRequired(),
                     e.getGathered(), e.getRemaining(), StackFormat.format(e.getRemaining(), stack)));
         }
         return sb.toString();

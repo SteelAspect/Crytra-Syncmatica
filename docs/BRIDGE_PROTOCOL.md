@@ -51,7 +51,7 @@ a UUID prefix of at least 8 characters).
 {"t":"ext","id":1,"ns":"cytra-syncmatica","v":1,"op":"ping","payload":{}}
 ```
 ```json
-{"t":"res","id":1,"ok":true,"out":{"mod":"1.0.0+1.21.11","protocol":1,"schematics":3,"materials_enabled":true,"coordinates_hidden":false,"queued_events":0,"ops":["ping","list_schematics","get_schematic","get_materials","get_where","material_action","link_claim"]}}
+{"t":"res","id":1,"ok":true,"out":{"mod":"1.0.0+1.21.11","protocol":1,"schematics":3,"materials_enabled":true,"coordinates_hidden":false,"queued_events":0,"ops":["ping","list_schematics","get_schematic","get_materials","get_groups","get_where","material_action","link_claim"]}}
 ```
 
 ### `list_schematics`
@@ -61,7 +61,7 @@ a UUID prefix of at least 8 characters).
 ```
 ```json
 {"t":"res","id":2,"ok":true,"out":{"schematics":[
-  {"id":"8f2a6c1e-1b2c-4d3e-9f00-112233445566","name":"Iron farm","file_name":"iron_farm","owner":{"uuid":"069a79f4-44e9-4726-a5be-fca90e38aaf5","name":"Notch"},"last_modified_by":{"uuid":"069a79f4-44e9-4726-a5be-fca90e38aaf5","name":"Notch"},"created_at":1790000000000,"modified_at":1790000500000,"dimension":"minecraft:overworld","rotation":"NONE","mirror":"NONE","coordinates_hidden":false,"origin":{"x":120,"y":64,"z":-340},"centre":{"x":123,"y":66,"z":-337},"size":{"x":6,"y":4,"z":6},"block_count":138,"unique_blocks":5,"materials":{"available":true,"items":5,"required":138,"gathered":40,"remaining":98,"percent":29.0,"complete":false}}
+  {"id":"8f2a6c1e-1b2c-4d3e-9f00-112233445566","name":"Iron farm","file_name":"iron_farm","owner":{"uuid":"069a79f4-44e9-4726-a5be-fca90e38aaf5","name":"Notch"},"last_modified_by":{"uuid":"069a79f4-44e9-4726-a5be-fca90e38aaf5","name":"Notch"},"created_at":1790000000000,"modified_at":1790000500000,"dimension":"minecraft:overworld","rotation":"NONE","mirror":"NONE","coordinates_hidden":false,"origin":{"x":120,"y":64,"z":-340},"centre":{"x":123,"y":66,"z":-337},"size":{"x":6,"y":4,"z":6},"block_count":138,"unique_blocks":5,"materials":{"available":true,"items":5,"required":138,"gathered":40,"remaining":98,"percent":29.0,"complete":false,"groups":3}}
 ]}}
 ```
 
@@ -85,17 +85,18 @@ When the material list could not be built, `out` also carries
 
 ### `get_materials`
 
-Payload: target plus optional `"missing_only"` (default `false`), `"sort"`
-(`"remaining"` default, or `"name"`), `"offset"` (default 0) and `"limit"`
-(default 50, max 500).
+Payload: target plus optional `"missing_only"` (default `false`), `"group"`
+(only items of that material group, case-insensitive; echoed back as `group`),
+`"sort"` (`"remaining"` default, or `"name"`), `"offset"` (default 0) and
+`"limit"` (default 50, max 500). Every item carries its `group`.
 
 ```json
 {"t":"ext","id":4,"ns":"cytra-syncmatica","v":1,"op":"get_materials","payload":{"schematic_id":"8f2a6c1e-1b2c-4d3e-9f00-112233445566","missing_only":true,"offset":0,"limit":50}}
 ```
 ```json
-{"t":"res","id":4,"ok":true,"out":{"schematic_id":"8f2a6c1e-1b2c-4d3e-9f00-112233445566","schematic":"Iron farm","summary":{"available":true,"items":5,"required":138,"gathered":40,"remaining":98,"percent":29.0,"complete":false},"total":4,"offset":0,"limit":50,"items":[
-  {"item":"minecraft:stone","required":100,"gathered":40,"remaining":60,"complete":false,"stack_size":64,"remaining_text":"60","editor":{"uuid":"069a79f4-44e9-4726-a5be-fca90e38aaf5","name":"Notch"},"edited_at":1790000600000},
-  {"item":"minecraft:oak_planks","required":20,"gathered":0,"remaining":20,"complete":false,"stack_size":64,"remaining_text":"20","editor":null,"edited_at":0}
+{"t":"res","id":4,"ok":true,"out":{"schematic_id":"8f2a6c1e-1b2c-4d3e-9f00-112233445566","schematic":"Iron farm","summary":{"available":true,"items":5,"required":138,"gathered":40,"remaining":98,"percent":29.0,"complete":false,"groups":3},"total":4,"offset":0,"limit":50,"items":[
+  {"item":"minecraft:stone","required":100,"gathered":40,"remaining":60,"complete":false,"group":"Stone","stack_size":64,"remaining_text":"60","editor":{"uuid":"069a79f4-44e9-4726-a5be-fca90e38aaf5","name":"Notch"},"edited_at":1790000600000},
+  {"item":"minecraft:oak_planks","required":20,"gathered":0,"remaining":20,"complete":false,"group":"Wood","stack_size":64,"remaining_text":"20","editor":null,"edited_at":0}
 ]}}
 ```
 
@@ -105,6 +106,28 @@ items (`"2 SB + 3 st + 5"`), computed from `stack_size`.
 
 Errors: `no material list yet for <name>` (extraction still running),
 `material tracking is disabled`, or the extraction error text.
+
+### `get_groups`
+
+Progress per material group. Groups come from a built-in mapping of the item
+id (Stone, Wood, Glass, Redstone, Lighting, Metal, Nether & End, Terrain,
+Decoration, Liquids, Other) overridden per item by the server's
+`config/cytra-syncmatica/groups.json` (`{"overrides": {"minecraft:stone": "Walls"}}`,
+re-read whenever a list is (re)built). Groups are listed in that order, custom
+names last, alphabetically; only groups with at least one item appear.
+
+```json
+{"t":"ext","id":9,"ns":"cytra-syncmatica","v":1,"op":"get_groups","payload":{"schematic":"Iron farm"}}
+```
+```json
+{"t":"res","id":9,"ok":true,"out":{"schematic_id":"8f2a6c1e-1b2c-4d3e-9f00-112233445566","schematic":"Iron farm","summary":{"available":true,"items":5,"required":138,"gathered":40,"remaining":98,"percent":29.0,"complete":false,"groups":3},"groups":[
+  {"name":"Stone","items":2,"required":106,"gathered":40,"remaining":66,"percent":37.7,"complete":false},
+  {"name":"Wood","items":2,"required":22,"gathered":0,"remaining":22,"percent":0.0,"complete":false},
+  {"name":"Glass","items":1,"required":10,"gathered":0,"remaining":10,"percent":0.0,"complete":false}
+]}}
+```
+
+Same errors as `get_materials`.
 
 ### `get_where`
 
@@ -143,7 +166,7 @@ through fabric-permissions-api, offline players included).
 {"t":"ext","id":6,"ns":"cytra-syncmatica","v":1,"op":"material_action","payload":{"schematic":"Iron farm","item":"minecraft:stone","action":"add","amount":64,"mc_uuid":"069a79f4-44e9-4726-a5be-fca90e38aaf5"}}
 ```
 ```json
-{"t":"res","id":6,"ok":true,"out":{"schematic_id":"8f2a6c1e-1b2c-4d3e-9f00-112233445566","schematic":"Iron farm","changed":true,"item":{"item":"minecraft:stone","required":100,"gathered":100,"remaining":0,"complete":true,"stack_size":64,"remaining_text":"0","editor":{"uuid":"069a79f4-44e9-4726-a5be-fca90e38aaf5","name":"Notch"},"edited_at":1790000700000},"summary":{"available":true,"items":5,"required":138,"gathered":100,"remaining":38,"percent":72.5,"complete":false}}}
+{"t":"res","id":6,"ok":true,"out":{"schematic_id":"8f2a6c1e-1b2c-4d3e-9f00-112233445566","schematic":"Iron farm","changed":true,"item":{"item":"minecraft:stone","required":100,"gathered":100,"remaining":0,"complete":true,"group":"Stone","stack_size":64,"remaining_text":"0","editor":{"uuid":"069a79f4-44e9-4726-a5be-fca90e38aaf5","name":"Notch"},"edited_at":1790000700000},"summary":{"available":true,"items":5,"required":138,"gathered":100,"remaining":38,"percent":72.5,"complete":false,"groups":3}}}
 ```
 
 `changed` is `false` when the count was already at that value. Errors:
@@ -213,7 +236,7 @@ unfinished items with the most remaining.
 ```json
 {"t":"ev","ns":"cytra-syncmatica","v":1,"type":"item_changed","payload":{"schematic_id":"8f2a6c1e-1b2c-4d3e-9f00-112233445566","schematic":"Iron farm","changes":[
   {"item":"minecraft:stone","required":100,"gathered":64,"remaining":36,"complete":false,"stack_size":64,"remaining_text":"36","editor":{"uuid":"069a79f4-44e9-4726-a5be-fca90e38aaf5","name":"Notch"},"edited_at":1790000700000,"old":0,"new":64,"op":"add"}
-],"materials":{"available":true,"items":5,"required":138,"gathered":64,"remaining":74,"percent":46.4,"complete":false},"top_remaining":[ ... ]},"ts":1790000705000}
+],"materials":{"available":true,"items":5,"required":138,"gathered":64,"remaining":74,"percent":46.4,"complete":false,"groups":3},"top_remaining":[ ... ]},"ts":1790000705000}
 ```
 
 ### `item_completed`
@@ -222,6 +245,16 @@ Sent immediately (not batched) when an item reaches its required count.
 
 ```json
 {"t":"ev","ns":"cytra-syncmatica","v":1,"type":"item_completed","payload":{"schematic_id":"8f2a6c1e-1b2c-4d3e-9f00-112233445566","schematic":"Iron farm","item":{ ...get_materials item... },"editor":{"uuid":"069a79f4-44e9-4726-a5be-fca90e38aaf5","name":"Notch"}},"ts":1790000700000}
+```
+
+### `group_completed`
+
+Every item of one group is gathered (sent once per edit that completes the
+group; any pending `item_changed` batch for that schematic is flushed first).
+`group` is one `get_groups` entry.
+
+```json
+{"t":"ev","ns":"cytra-syncmatica","v":1,"type":"group_completed","payload":{"schematic_id":"8f2a6c1e-1b2c-4d3e-9f00-112233445566","schematic":"Iron farm","group":{"name":"Glass","items":1,"required":10,"gathered":10,"remaining":0,"percent":100.0,"complete":true},"editor":{"uuid":"069a79f4-44e9-4726-a5be-fca90e38aaf5","name":"Notch"}},"ts":1790000702000}
 ```
 
 ### `schematic_completed`
@@ -255,7 +288,7 @@ Live changes: `/cytra-syncmatica config set bridge <key> <value>`.
 
 ## Not yet in this version
 
-Projects (`list_projects`, `get_project`, project targets), `get_groups`,
-`get_shopping_list`, `get_layers`, `get_preview` and the `group_completed`,
-`layer_completed`, `project_completed` events are added by the Step 3 extras and
-documented here as they land. Until then they answer `unknown op <op>`.
+Projects (`list_projects`, `get_project`, project targets),
+`get_shopping_list`, `get_layers`, `get_preview` and the `layer_completed`,
+`project_completed` events are added by the Step 3 extras and documented here
+as they land. Until then they answer `unknown op <op>`.

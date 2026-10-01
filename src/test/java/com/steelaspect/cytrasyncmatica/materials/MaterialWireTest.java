@@ -16,6 +16,7 @@ final class MaterialWireTest {
         final UUID who = UUID.randomUUID();
         list.get("minecraft:stone").setGathered(12, who, "Alex", 77L);
         list.put(new MaterialEntry("minecraft:oak_log", 7));
+        list.get("minecraft:oak_log").setGroup("Roof");
 
         final PacketByteBuf buf = new PacketByteBuf(Unpooled.buffer());
         MaterialWire.writeList(buf, list);
@@ -28,6 +29,8 @@ final class MaterialWireTest {
         assertEquals("Alex", back.get("minecraft:stone").getEditorName());
         assertEquals(77L, back.get("minecraft:stone").getEditedAt());
         assertNull(back.get("minecraft:oak_log").getEditorUuid());
+        assertEquals("Roof", back.get("minecraft:oak_log").getGroup());
+        assertEquals(MaterialGroups.OTHER, back.get("minecraft:stone").getGroup());
         assertEquals(0, buf.readableBytes());
     }
 

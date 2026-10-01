@@ -26,6 +26,8 @@ public class GuiMaterialTracker extends GuiListBase<MaterialEntry, WidgetMateria
     private static final int LIST_TOP = 66;
 
     private TrackedSchematic schematic;
+    /** Group filter; null shows every group. */
+    private String group;
     private final Runnable refreshListener = this::onTrackerChanged;
 
     public GuiMaterialTracker(final TrackedSchematic schematic) {
@@ -39,6 +41,36 @@ public class GuiMaterialTracker extends GuiListBase<MaterialEntry, WidgetMateria
 
     public TrackedSchematic getSchematic() {
         return schematic;
+    }
+
+    public String getGroup() {
+        return group;
+    }
+
+    private List<String> groupNames() {
+        final MaterialList list = MaterialTrackerClient.getInstance().getList(schematic);
+        final List<String> names = new java.util.ArrayList<>();
+        if (list != null) {
+            for (final MaterialList.GroupTotals g : list.groups()) {
+                names.add(g.name());
+            }
+        }
+        return names;
+    }
+
+    private void cycleGroup() {
+        final List<String> names = groupNames();
+        if (names.isEmpty()) {
+            group = null;
+            return;
+        }
+        final int i = group == null ? -1 : names.indexOf(group);
+        group = i + 1 >= names.size() ? null : names.get(i + 1);
+    }
+
+    private String groupLabel() {
+        return StringUtils.translate("cytra-syncmatica.gui.button.group",
+                group == null ? StringUtils.translate("cytra-syncmatica.gui.label.group.all") : group);
     }
 
     private void updateTitle() {
@@ -55,6 +87,11 @@ public class GuiMaterialTracker extends GuiListBase<MaterialEntry, WidgetMateria
         x = addTopButton(x, sortLabel(), (b, m) -> {
             MaterialTrackerPreferences.cycleSortMode();
             b.setDisplayString(sortLabel());
+            getListWidget().refreshEntries();
+        });
+        x = addTopButton(x, groupLabel(), (b, m) -> {
+            cycleGroup();
+            b.setDisplayString(groupLabel());
             getListWidget().refreshEntries();
         });
         x = addTopButton(x, hideLabel(), (b, m) -> {
@@ -106,6 +143,7 @@ public class GuiMaterialTracker extends GuiListBase<MaterialEntry, WidgetMateria
     private void openSchematicSelect() {
         final GuiSchematicSelect gui = new GuiSchematicSelect(selected -> {
             schematic = selected;
+            group = null;
             MaterialTrackerPreferences.setLastSchematicKey(selected.key());
             updateTitle();
         });
@@ -161,6 +199,11 @@ public class GuiMaterialTracker extends GuiListBase<MaterialEntry, WidgetMateria
             } else {
                 status += " · " + String.format(java.util.Locale.ROOT, "%.1f%%", list.percentComplete()) + " · "
                         + StringUtils.translate("cytra-syncmatica.gui.label.remaining_total", list.totalRemaining());
+                final MaterialList.GroupTotals g = group == null ? null : list.group(group);
+                if (g != null) {
+                    status += " · " + g.name() + " " + String.format(java.util.Locale.ROOT, "%.0f%%", g.percent())
+                            + " (" + g.gathered() + "/" + g.required() + ")";
+                }
             }
         }
         drawStringWithShadow(guiContext, status, 10, 46, 0xFFC0C0C0);

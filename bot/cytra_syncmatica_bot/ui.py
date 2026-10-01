@@ -61,7 +61,7 @@ def schematic_embed(s: dict, server_name: str) -> discord.Embed:
 
 
 def materials_embed(target_name: str, server_name: str, summary: dict, items: list[dict], page: int, pages: int,
-                    missing_only: bool, top_remaining: list[dict] | None = None) -> discord.Embed:
+                    missing_only: bool, top_remaining: list[dict] | None = None, group: str | None = None) -> discord.Embed:
     e = discord.Embed(title=f"Materials: {target_name}", colour=Palette.OK if summary.get("complete") else Palette.GOLD)
     e.set_author(name=server_name)
     if summary.get("available"):
@@ -76,10 +76,28 @@ def materials_embed(target_name: str, server_name: str, summary: dict, items: li
         editor = it.get("editor")
         who = f" · {editor['name']}" if editor else ""
         lines.append(f"{mark} **{item_name(it['item'])}** {it['gathered']:,}/{it['required']:,} · {remaining}{who}")
-    e.add_field(name=("Missing items" if missing_only else "Items") + f" (page {page}/{max(pages, 1)})",
+    title = "Missing items" if missing_only else "Items"
+    if group:
+        title += f" · {group}"
+    e.add_field(name=title + f" (page {page}/{max(pages, 1)})",
                 value="\n".join(lines) if lines else "nothing to show", inline=False)
     if top_remaining:
         e.add_field(name="Most needed", value=", ".join(f"{item_name(t['item'])} ({t['remaining_text']})" for t in top_remaining[:5]), inline=False)
+    return e
+
+
+def groups_embed(target_name: str, server_name: str, summary: dict, groups: list[dict]) -> discord.Embed:
+    e = discord.Embed(title=f"Material groups: {target_name}", colour=Palette.OK if summary.get("complete") else Palette.INFO)
+    e.set_author(name=server_name)
+    if summary.get("available"):
+        e.description = f"{progress_bar(summary['percent'])} **{summary['percent']:.1f}%** overall · {len(groups)} groups"
+    lines = []
+    for g in groups:
+        mark = "✅" if g.get("complete") else "▫️"
+        lines.append(f"{mark} **{g['name']}** {progress_bar(g.get('percent', 0.0), 8)} {g.get('percent', 0.0):.0f}% · "
+                     f"{g['gathered']:,}/{g['required']:,} · {g['items']} item{'s' if g['items'] != 1 else ''}")
+    e.add_field(name="Groups", value="\n".join(lines) if lines else "no materials yet", inline=False)
+    e.set_footer(text="Groups come from the server's groups.json overrides and a built-in mapping")
     return e
 
 

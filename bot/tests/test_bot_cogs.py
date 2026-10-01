@@ -81,6 +81,32 @@ async def test_materials_view_buttons_send_the_linked_uuid_and_show_refusals_pri
         it4 = FakeInteraction(make_member(42), bot)
         await view._turn(it4, 1)
         assert view.page == 1 and len(view.items) == 2
+
+        # group filter: the select lists the groups, choosing one narrows the items
+        assert [g["name"] for g in view.groups] == ["Stone", "Wood", "Glass"]
+        it5 = FakeInteraction(make_member(42), bot, data={"values": ["Wood"]})
+        await view._on_group(it5)
+        assert view.group == "Wood" and view.page == 0
+        assert {i["item"] for i in view.items} == {"minecraft:oak_planks", "minecraft:oak_door"}
+        assert "Wood" in it5.response.edits[-1]["embed"].fields[0].name
+        it6 = FakeInteraction(make_member(42), bot, data={"values": ["*"]})
+        await view._on_group(it6)
+        assert view.group is None and len(view.items) == 3
+    finally:
+        await shutdown(bot, server)
+
+
+async def test_groups_command_lists_progress_per_group():
+    bot, server, ext = await make_bot()
+    try:
+        ext.items["minecraft:glass"][1] = 10
+        cog = Schematics(bot)
+        it = FakeInteraction(make_member(1), bot)
+        await cog.groups.callback(cog, it, "Iron farm")
+        embed = it.followup.sent[-1]["embed"]
+        assert embed.title == "Material groups: Iron farm"
+        value = embed.fields[0].value
+        assert "✅ **Glass**" in value and "▫️ **Stone**" in value and "2 items" in value
     finally:
         await shutdown(bot, server)
 
@@ -123,6 +149,11 @@ async def test_feed_edits_one_message_per_schematic_and_refreshes_on_resync():
         assert "50" in edited.description
         await feed.on_link_event("item_completed", {"schematic": "Iron farm", "item": ext.entry("minecraft:glass"), "editor": {"name": "OpPlayer"}}, 4)
         assert "complete" in channel.sent[-1]["content"]
+        ext.items["minecraft:glass"][1] = 10
+        await feed.on_link_event("group_completed", {"schematic_id": SCHEMATIC_ID, "schematic": "Iron farm",
+                                                     "group": ext.groups()[2], "editor": {"name": "OpPlayer"}}, 4)
+        assert "Group **Glass**" in channel.sent[-1]["content"] and "OpPlayer" in channel.sent[-1]["content"]
+        assert len(channel.sent) == 4, "the materials message was edited, not re-posted"
         # the message vanished (deleted by a mod): resync posts a fresh one and re-tracks it
         channel.messages.clear()
         await feed.on_link_event("resync", {"queued_events_sent": 0, "schematics": 1}, 5)
