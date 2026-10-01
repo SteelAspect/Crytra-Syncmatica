@@ -1,0 +1,5 @@
+Cytra-Syncmatica progress log (append-only; never delete entries)
+Format: timestamp | step | what changed | files touched | build status | next step
+===================================================================================
+
+2026-10-01 20:05 UTC | Setup | Chose progress option 2 (this file): the webhook option's URL was a placeholder, so no webhook was posted. Switch any time by giving a real webhook URL. Cloned upstream Conflux-Union/syncmatica_r (commit c330633) into the scratchpad for reading; attached steelaspect/cytra-bridge (Cytra Link + bot live on branch claude/affectionate-planck-i7gxbm, not master). | PROGRESS.txt, build.gradle, settings.gradle, gradle.properties, gradle wrapper, LICENSE, .gitignore | n/a (no source yet) | Read upstream, summarise wiring, run the 1.21.11 preprocessor once to obtain a single-version source tree.
