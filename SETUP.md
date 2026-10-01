@@ -7,7 +7,7 @@ Everything you need is in this repository:
 | `release/cytra-syncmatica-1.0.0+1.21.11.jar` | the mod (client, dedicated server and singleplayer, one jar) |
 | `release/cytra-link-0.3.0.jar` | the Cytra Link mod, server side only, needed only for the Discord bot |
 | `release/test-farm.litematic` | a tiny 6×4×6 test schematic (100 stone, 20 oak planks, 2 oak doors, 3 double stone slabs, 10 glass) |
-| `bot/` | the Discord bot (Python) |
+| `bot/` (also zipped as `release/cytra-syncmatica-bot.zip`) | the Discord bot (Python) |
 
 Versions this was built and tested with (Minecraft **1.21.11**):
 
