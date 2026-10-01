@@ -3,6 +3,7 @@ package com.steelaspect.cytrasyncmatica.client;
 import com.steelaspect.cytrasyncmatica.client.hotkey.HotkeyCallbackOpenGui;
 import com.steelaspect.cytrasyncmatica.client.hotkey.SyncmaticaHotkeyProvider;
 import com.steelaspect.cytrasyncmatica.client.hotkey.SyncmaticaHotkeys;
+import com.steelaspect.cytrasyncmatica.client.gui.GuiMaterialTracker;
 import com.steelaspect.cytrasyncmatica.litematica.gui.GuiBuildManagement;
 import com.steelaspect.cytrasyncmatica.litematica.gui.GuiSyncmaticaSharedSettings;
 import fi.dy.masa.malilib.config.ConfigManager;
@@ -31,5 +32,15 @@ public final class SyncmaticaInitHandler implements IInitializationHandler {
         // Set up hotkey callbacks
         SyncmaticaHotkeys.OPEN_BUILD_MANAGEMENT.getKeybind()
                 .setCallback(new HotkeyCallbackOpenGui(GuiBuildManagement::new));
+        SyncmaticaHotkeys.OPEN_MATERIAL_TRACKER.getKeybind()
+                .setCallback(new HotkeyCallbackOpenGui(() -> new GuiMaterialTracker(null)));
+        SyncmaticaHotkeys.TOGGLE_MATERIAL_HUD.getKeybind()
+                .setCallback((action, key) -> {
+                    if (action != fi.dy.masa.malilib.hotkeys.KeyAction.PRESS) {
+                        return false;
+                    }
+                    ClientConfigs.General.HUD_ENABLED.setBooleanValue(!ClientConfigs.General.HUD_ENABLED.getBooleanValue());
+                    return true;
+                });
     }
 }

@@ -10,6 +10,7 @@ import java.util.List;
 public enum MainMenuButtonType implements IButtonType {
 
     VIEW_SYNCMATICS("cytra-syncmatica.gui.button.view_syncmatics"),
+    MATERIAL_TRACKER("cytra-syncmatica.gui.button.material_tracker"),
     BUILD_MANAGEMENT("cytra-syncmatica.gui.button.build_management"),
     SHARED_SETTINGS("cytra-syncmatica.gui.button.client_settings");
 

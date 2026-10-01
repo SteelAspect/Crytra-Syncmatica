@@ -31,6 +31,7 @@ public class Context {
     private final PlayerIdentifierProvider playerIdentifierProvider;
     private final SharingService sharingService;
     private final BuildService buildService;
+    private final MaterialTrackingService materialTracking;
     private MinecraftServer minecraftServer;
     private ConfigRegistry configRegistry;
     private ConfigStore configStore;
@@ -39,6 +40,7 @@ public class Context {
     private boolean isStarted = false;
     private boolean quotaStarted;
     private boolean sharingStarted;
+    private boolean materialsStarted;
     private boolean buildStarted;
     private boolean debugStarted;
     private boolean managerStarted;
@@ -75,10 +77,13 @@ public class Context {
             sharingService.setContext(this);
             buildService = new BuildService();
             buildService.setContext(this);
+            materialTracking = new MaterialTrackingService();
+            materialTracking.setContext(this);
         } else {
             quota = null;
             sharingService = null;
             buildService = null;
+            materialTracking = null;
         }
         playerIdentifierProvider = new PlayerIdentifierProvider(this);
         debugService = new DebugService();
@@ -113,6 +118,11 @@ public class Context {
 
     public SharingService getSharingService() {
         return sharingService;
+    }
+
+    /** Server side only; null on a client context. */
+    public MaterialTrackingService getMaterialTracking() {
+        return materialTracking;
     }
 
     public BuildService getBuildService() {
@@ -187,6 +197,9 @@ public class Context {
         if (isServer() && (buildService == null || !buildService.isEnabled())) {
             features.remove(Feature.BUILD_MANAGEMENT);
         }
+        if (isServer() && (materialTracking == null || !materialTracking.isEnabled())) {
+            features.remove(Feature.MATERIAL_TRACKING);
+        }
         fs = new FeatureSet(features);
     }
 
@@ -216,6 +229,10 @@ public class Context {
             if (buildService != null) {
                 buildService.startup();
                 buildStarted = true;
+            }
+            if (materialTracking != null) {
+                materialTracking.startup();
+                materialsStarted = true;
             }
             debugService.startup();
             debugStarted = true;
@@ -300,6 +317,9 @@ public class Context {
             if (buildService != null) {
                 needsRewrite |= loadConfigurationForService(buildService, configuration, attemptToLoad);
             }
+            if (materialTracking != null) {
+                needsRewrite |= loadConfigurationForService(materialTracking, configuration, attemptToLoad);
+            }
         }
         needsRewrite |= loadConfigurationForService(debugService, configuration, attemptToLoad);
         loadedConfiguration = configuration;
@@ -308,6 +328,7 @@ public class Context {
             quota.registerConfigOptions(configRegistry);
             sharingService.registerConfigOptions(configRegistry);
             buildService.registerConfigOptions(configRegistry);
+            materialTracking.registerConfigOptions(configRegistry);
             debugService.registerConfigOptions(configRegistry);
             configStore = new ConfigStore(getConfigFile().toPath(), configuration, configRegistry);
         } else {
@@ -395,6 +416,10 @@ public class Context {
         if (debugStarted) {
             stop(debugService::shutdown, startupFailure);
             debugStarted = false;
+        }
+        if (materialsStarted) {
+            stop(materialTracking::shutdown, startupFailure);
+            materialsStarted = false;
         }
         if (buildStarted) {
             stop(buildService::shutdown, startupFailure);

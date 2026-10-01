@@ -58,8 +58,75 @@ public final class SyncmaticaCommand {
         final LiteralArgumentBuilder<ServerCommandSource> root = CommandManager.literal("cytra-syncmatica")
                 .then(loadArgument())
                 .then(configArgument())
+                .then(exportArgument())
                 .then(projectArgument());
         dispatcher.register(root);
+    }
+
+    private static LiteralArgumentBuilder<ServerCommandSource> exportArgument() {
+        return CommandManager.literal("export")
+                .then(CommandManager.argument("schematic", greedyString())
+                        .suggests(SyncmaticaCommand::suggestPlacementNames)
+                        .executes(SyncmaticaCommand::handleExport));
+    }
+
+    private static CompletableFuture<Suggestions> suggestPlacementNames(
+            final CommandContext<ServerCommandSource> context, final SuggestionsBuilder builder) {
+        final Context syncmaticaContext = Syncmatica.getContext(Syncmatica.SERVER_CONTEXT);
+        if (syncmaticaContext != null) {
+            final String typed = builder.getRemaining().toLowerCase(java.util.Locale.ROOT);
+            syncmaticaContext.getSyncmaticManager().getAll().stream()
+                    .map(ServerPlacement::getName)
+                    .filter(name -> name.toLowerCase(java.util.Locale.ROOT).startsWith(typed))
+                    .forEach(name -> builder.suggest(name.contains(" ") ? "\"" + name + "\"" : name));
+        }
+        return builder.buildFuture();
+    }
+
+    /** Resolves a placement by display name, file name or id prefix. */
+    public static Optional<ServerPlacement> findPlacementByName(final Context syncmaticaContext, final String raw) {
+        final String name = raw == null ? "" : raw.trim().replaceAll("^\"|\"$", "");
+        final Collection<ServerPlacement> all = syncmaticaContext.getSyncmaticManager().getAll();
+        Optional<ServerPlacement> hit = all.stream().filter(p -> p.getName().equals(name)).findFirst();
+        if (hit.isEmpty()) {
+            hit = all.stream().filter(p -> p.getName().equalsIgnoreCase(name) || p.getFileName().equalsIgnoreCase(name)).findFirst();
+        }
+        if (hit.isEmpty() && name.length() >= 8) {
+            hit = all.stream().filter(p -> p.getId().toString().startsWith(name.toLowerCase(java.util.Locale.ROOT))).findFirst();
+        }
+        return hit;
+    }
+
+    private static int handleExport(final CommandContext<ServerCommandSource> context) {
+        final Context syncmaticaContext = Syncmatica.getContext(Syncmatica.SERVER_CONTEXT);
+        if (syncmaticaContext == null || syncmaticaContext.getMaterialTracking() == null) {
+            context.getSource().sendError(literal("Material tracking is unavailable"));
+            return 0;
+        }
+        final String name = context.getArgument("schematic", String.class);
+        final Optional<ServerPlacement> placement = findPlacementByName(syncmaticaContext, name);
+        if (placement.isEmpty()) {
+            context.getSource().sendError(literal("Unknown shared schematic: " + name));
+            return 0;
+        }
+        final java.nio.file.Path folder = new File(syncmaticaContext.getConfigFolder(), "exports").toPath();
+        final ServerCommandSource source = context.getSource();
+        syncmaticaContext.getMaterialTracking().export(placement.get(), folder).whenComplete((paths, error) -> {
+            final Runnable reply = () -> {
+                if (error != null) {
+                    source.sendError(literal("Export failed: " + error.getMessage()));
+                } else {
+                    source.sendFeedback(() -> literal("Exported materials of '" + placement.get().getName() + "' to "
+                            + paths.get(0).getFileName() + " and " + paths.get(1).getFileName() + " in " + folder), false);
+                }
+            };
+            if (source.getServer() != null) {
+                source.getServer().execute(reply);
+            } else {
+                reply.run();
+            }
+        });
+        return 1;
     }
 
     private static LiteralArgumentBuilder<ServerCommandSource> configArgument() {

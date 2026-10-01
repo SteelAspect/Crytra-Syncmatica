@@ -69,6 +69,9 @@ public class SyncmaticManager {
         if (context.getBuildService() != null) {
             context.getBuildService().attachPlacement(placement);
         }
+        if (context.getMaterialTracking() != null) {
+            context.getMaterialTracking().attachPlacement(placement);
+        }
     }
 
     private void detachFromServices(final ServerPlacement placement) {
@@ -77,6 +80,9 @@ public class SyncmaticManager {
         }
         if (context.getBuildService() != null) {
             context.getBuildService().detachPlacement(placement);
+        }
+        if (context.getMaterialTracking() != null) {
+            context.getMaterialTracking().detachPlacement(placement);
         }
     }
 

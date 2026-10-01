@@ -7,6 +7,9 @@ import com.steelaspect.cytrasyncmatica.communication.ProtocolLimits;
 import com.steelaspect.cytrasyncmatica.communication.FeatureSet;
 import com.steelaspect.cytrasyncmatica.communication.MessageCodec;
 import com.steelaspect.cytrasyncmatica.Context;
+import com.steelaspect.cytrasyncmatica.client.materials.MaterialTrackerClient;
+import com.steelaspect.cytrasyncmatica.materials.MaterialList;
+import com.steelaspect.cytrasyncmatica.materials.MaterialWire;
 import com.steelaspect.cytrasyncmatica.Feature;
 import com.steelaspect.cytrasyncmatica.ServerPlacement;
 import com.steelaspect.cytrasyncmatica.Syncmatica;
@@ -127,6 +130,18 @@ public class ClientCommunicationManager extends CommunicationManager {
                         detail
                 ));
             }
+            return;
+        }
+        if (type == PacketType.MATERIAL_LIST) {
+            final UUID placementId = packetBuf.readUuid();
+            final String error = packetBuf.readString(ProtocolLimits.MAX_MESSAGE_LENGTH);
+            final MaterialList list = MaterialWire.readList(packetBuf);
+            MaterialTrackerClient.getInstance().onServerList(placementId, list, error);
+            return;
+        }
+        if (type == PacketType.MATERIAL_UPDATE) {
+            final UUID placementId = packetBuf.readUuid();
+            MaterialTrackerClient.getInstance().onServerUpdate(placementId, MaterialWire.readEntry(packetBuf));
             return;
         }
         if (type == PacketType.REGISTER_VERSION) {

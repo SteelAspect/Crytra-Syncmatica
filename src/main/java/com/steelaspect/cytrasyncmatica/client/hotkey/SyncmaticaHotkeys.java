@@ -27,9 +27,35 @@ public final class SyncmaticaHotkeys {
     );
 
     /**
-     * Hotkey to open the Material Collections GUI.
+     * Hotkey to open the team material tracker.
      * Default is empty (unassigned).
      */
+    public static final ConfigHotkey OPEN_MATERIAL_TRACKER = new ConfigHotkey(
+            "openMaterialTracker",
+            "",
+            HOTKEY_SETTINGS,
+            "cytra-syncmatica.hotkey.open_material_tracker.comment",
+            "cytra-syncmatica.gui.label.hotkey.material_tracker"
+    ) {
+        @Override
+        public String getConfigGuiDisplayName() {
+            return getPrettyName();
+        }
+    };
+
+    public static final ConfigHotkey TOGGLE_MATERIAL_HUD = new ConfigHotkey(
+            "toggleMaterialHud",
+            "",
+            HOTKEY_SETTINGS,
+            "cytra-syncmatica.hotkey.toggle_material_hud.comment",
+            "cytra-syncmatica.gui.label.hotkey.material_hud"
+    ) {
+        @Override
+        public String getConfigGuiDisplayName() {
+            return getPrettyName();
+        }
+    };
+
     public static final ConfigHotkey OPEN_BUILD_MANAGEMENT = new ConfigHotkey(
             "openBuildManagement",
             "",
@@ -44,7 +70,7 @@ public final class SyncmaticaHotkeys {
     };
 
     private static final List<ConfigHotkey> HOTKEYS = Collections.unmodifiableList(
-            Arrays.asList(OPEN_BUILD_MANAGEMENT)
+            Arrays.asList(OPEN_MATERIAL_TRACKER, TOGGLE_MATERIAL_HUD, OPEN_BUILD_MANAGEMENT)
     );
 
     private SyncmaticaHotkeys() {

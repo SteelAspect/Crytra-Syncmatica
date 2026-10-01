@@ -11,6 +11,12 @@ import com.steelaspect.cytrasyncmatica.extended_core.PlayerIdentifier;
 import com.steelaspect.cytrasyncmatica.schematic.SchematicPeek;
 import com.steelaspect.cytrasyncmatica.schematic.SchematicPeeker;
 import com.steelaspect.cytrasyncmatica.service.BuildService;
+import com.steelaspect.cytrasyncmatica.service.MaterialTrackingService;
+import com.steelaspect.cytrasyncmatica.materials.MaterialAccess;
+import com.steelaspect.cytrasyncmatica.materials.MaterialEntry;
+import com.steelaspect.cytrasyncmatica.materials.MaterialList;
+import com.steelaspect.cytrasyncmatica.materials.MaterialOp;
+import com.steelaspect.cytrasyncmatica.materials.MaterialWire;
 import com.steelaspect.cytrasyncmatica.util.SyncmaticaUtil;
 import com.mojang.authlib.GameProfile;
 import io.netty.buffer.Unpooled;
@@ -243,7 +249,96 @@ public class ServerCommunicationManager extends CommunicationManager {
         }
         if (type == PacketType.BUILD_REGION_CLAIM) {
             handleBuildRegionClaim(source, packetBuf);
+            return;
         }
+        if (type == PacketType.MATERIAL_REQUEST) {
+            final ServerPlacement placement = context.getSyncmaticManager().getPlacement(packetBuf.readUuid());
+            if (placement != null && supportsMaterialTracking(source)) {
+                sendMaterialList(placement, source);
+            }
+            return;
+        }
+        if (type == PacketType.MATERIAL_EDIT) {
+            handleMaterialEdit(source, packetBuf);
+        }
+    }
+
+    // -- material tracking -------------------------------------------------------
+
+    private boolean supportsMaterialTracking(final ExchangeTarget target) {
+        final FeatureSet local = context.getFeatureSet();
+        final FeatureSet partner = target.getFeatureSet();
+        return local != null && partner != null
+                && local.hasFeature(Feature.MATERIAL_TRACKING) && partner.hasFeature(Feature.MATERIAL_TRACKING);
+    }
+
+    public void sendMaterialList(final ServerPlacement placement, final ExchangeTarget target) {
+        final MaterialTrackingService materials = context.getMaterialTracking();
+        if (materials == null) {
+            return;
+        }
+        final MaterialList list = materials.getList(placement);
+        final PacketByteBuf buf = new PacketByteBuf(Unpooled.buffer());
+        buf.writeUuid(placement.getId());
+        final String error = materials.getExtractionError(placement.getId());
+        buf.writeString(error == null ? "" : error, ProtocolLimits.MAX_MESSAGE_LENGTH);
+        MaterialWire.writeList(buf, list == null ? new MaterialList() : list);
+        target.sendPacket(PacketType.MATERIAL_LIST.toIdentifier(target.getProtocolFlavor()), buf, context);
+    }
+
+    public void broadcastMaterialList(final ServerPlacement placement) {
+        purgeStaleTargets();
+        for (final ExchangeTarget client : new ArrayList<>(broadcastTargets)) {
+            if (supportsMaterialTracking(client)) {
+                sendMaterialList(placement, client);
+            }
+        }
+    }
+
+    public void broadcastMaterialUpdate(final ServerPlacement placement, final MaterialEntry entry) {
+        purgeStaleTargets();
+        for (final ExchangeTarget client : new ArrayList<>(broadcastTargets)) {
+            if (!supportsMaterialTracking(client)) {
+                continue;
+            }
+            final PacketByteBuf buf = new PacketByteBuf(Unpooled.buffer());
+            buf.writeUuid(placement.getId());
+            MaterialWire.writeEntry(buf, entry);
+            client.sendPacket(PacketType.MATERIAL_UPDATE.toIdentifier(client.getProtocolFlavor()), buf, context);
+        }
+    }
+
+    private void handleMaterialEdit(final ExchangeTarget source, final PacketByteBuf packetBuf) {
+        final UUID placementId = packetBuf.readUuid();
+        final String itemId = packetBuf.readString(ProtocolLimits.MAX_ITEM_ID_LENGTH);
+        final MaterialOp op = MaterialOp.fromOrdinal(packetBuf.readByte());
+        final int amount = packetBuf.readInt();
+        final MaterialTrackingService materials = context.getMaterialTracking();
+        final ServerPlayerEntity player = playerMap.get(source);
+        if (materials == null || !materials.isEnabled() || op == null || player == null) {
+            return;
+        }
+        final ServerPlacement placement = context.getSyncmaticManager().getPlacement(placementId);
+        if (placement == null) {
+            return;
+        }
+        if (!canEditMaterials(player, op)) {
+            sendMessage(source, MessageType.ERROR, "cytra-syncmatica.error.permission_denied");
+            return;
+        }
+        final PlayerIdentifier editor = context.getPlayerIdentifierProvider().createOrGet(player.getGameProfile());
+        final MaterialTrackingService.Outcome outcome = materials.apply(placement, itemId, op, amount, editor);
+        if (outcome == MaterialTrackingService.Outcome.UNKNOWN_ITEM || outcome == MaterialTrackingService.Outcome.NO_LIST) {
+            sendMessage(source, MessageType.ERROR, "cytra-syncmatica.error.materials.unknown_item", itemId);
+        }
+    }
+
+    /** The same rule the bridge applies to a bot's acting player. */
+    public static boolean canEditMaterials(final ServerPlayerEntity player, final MaterialOp op) {
+        if (op == MaterialOp.RESET) {
+            return Permissions.check(player, MaterialAccess.RESET_PERMISSION, MaterialAccess.RESET_PERMISSION_LEVEL);
+        }
+        return Permissions.check(player, MaterialAccess.EDIT_PERMISSION, MaterialAccess.EDIT_FALLBACK);
     }
 
     /**

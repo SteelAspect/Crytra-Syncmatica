@@ -2,6 +2,8 @@ package com.steelaspect.cytrasyncmatica.client;
 
 import com.steelaspect.cytrasyncmatica.Context;
 import com.steelaspect.cytrasyncmatica.Syncmatica;
+import com.steelaspect.cytrasyncmatica.client.hud.MaterialHud;
+import com.steelaspect.cytrasyncmatica.client.materials.MaterialTrackerClient;
 import com.steelaspect.cytrasyncmatica.litematica.BuildClaimWarning;
 import fi.dy.masa.malilib.event.InitializationHandler;
 import net.fabricmc.api.ClientModInitializer;
@@ -20,6 +22,7 @@ public class SyncmaticaClient implements ClientModInitializer {
         requireClientDependencies();
         ClientConfigs.INSTANCE.load();
         BuildClaimWarning.register();
+        MaterialHud.getInstance().register();
         ClientTickEvents.END_CLIENT_TICK.register(SyncmaticaClient::handleClientTick);
 
         // Hotkeys and the config screen are registered once MaLiLib is ready.
@@ -49,6 +52,10 @@ public class SyncmaticaClient implements ClientModInitializer {
         final Context clientContext = Syncmatica.getContext(Syncmatica.CLIENT_CONTEXT);
         if (clientContext != null && clientContext.getCommunicationManager() != null) {
             clientContext.getCommunicationManager().tick();
+        }
+        if (client.world != null && client.player != null) {
+            MaterialTrackerClient.getInstance().tick();
+            MaterialHud.getInstance().tick();
         }
     }
 }

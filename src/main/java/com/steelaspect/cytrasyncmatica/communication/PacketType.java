@@ -42,7 +42,17 @@ public enum PacketType {
 
     MESSAGE("mesage"),
 
-    BUILD_REGION_CLAIM("build_region_claim");
+    BUILD_REGION_CLAIM("build_region_claim"),
+
+    // Cytra-Syncmatica material tracking
+    /** S2C: the full list of one placement (answer to a request, or after a rebuild). */
+    MATERIAL_LIST("material_list"),
+    /** S2C: one entry changed. */
+    MATERIAL_UPDATE("material_update"),
+    /** C2S: please send me the list of this placement. */
+    MATERIAL_REQUEST("material_request"),
+    /** C2S: change one entry (add/set/done/reset). */
+    MATERIAL_EDIT("material_edit");
 
     /** Our own channel namespace. Deliberately not the cytra-syncmatica one: the wire format differs. */
     public static final String NAMESPACE = "cytra-syncmatica";

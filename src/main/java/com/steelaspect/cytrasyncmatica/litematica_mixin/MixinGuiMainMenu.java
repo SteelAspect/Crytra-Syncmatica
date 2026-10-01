@@ -28,6 +28,8 @@ public class MixinGuiMainMenu extends GuiBase {
         int y = 30;
         createChangeMenuButton(x, y, width, MainMenuButtonType.VIEW_SYNCMATICS);
         y += 22;
+        createChangeMenuButton(x, y, width, MainMenuButtonType.MATERIAL_TRACKER);
+        y += 22;
         createChangeMenuButton(x, y, width, MainMenuButtonType.BUILD_MANAGEMENT);
         y += 22;
         createChangeMenuButton(x, y, width, MainMenuButtonType.SHARED_SETTINGS);

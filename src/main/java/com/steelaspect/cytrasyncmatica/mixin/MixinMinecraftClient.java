@@ -17,6 +17,8 @@ public class MixinMinecraftClient {
     @Inject(method = "onDisconnected", at = @At("HEAD"))
     private void shutdownSyncmatica(final CallbackInfo ci) {
         ScreenHelper.close();
+        com.steelaspect.cytrasyncmatica.client.materials.MaterialTrackerClient.getInstance().reset();
+        com.steelaspect.cytrasyncmatica.client.hud.MaterialHud.getInstance().reset();
         ClaimedRegionVisibility.getInstance().reset();
         Syncmatica.shutdown();
         LitematicManager.clear();

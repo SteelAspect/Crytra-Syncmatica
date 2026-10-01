@@ -19,6 +19,9 @@ public class ButtonListenerChangeMenu implements IButtonActionListener {
     public void actionPerformedWithButton(final ButtonBase arg0, final int arg1) {
         GuiBase gui = null;
         switch (type) {
+            case MATERIAL_TRACKER:
+                gui = new com.steelaspect.cytrasyncmatica.client.gui.GuiMaterialTracker(null);
+                break;
             case BUILD_MANAGEMENT:
                 gui = new GuiBuildManagement();
                 break;

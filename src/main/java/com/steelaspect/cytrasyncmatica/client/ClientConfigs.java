@@ -11,6 +11,8 @@ import fi.dy.masa.malilib.config.ConfigUtils;
 import fi.dy.masa.malilib.config.IConfigBase;
 import fi.dy.masa.malilib.config.IConfigHandler;
 import fi.dy.masa.malilib.config.options.ConfigBoolean;
+import fi.dy.masa.malilib.config.options.ConfigDouble;
+import fi.dy.masa.malilib.config.options.ConfigInteger;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
@@ -37,6 +39,12 @@ public final class ClientConfigs implements IConfigHandler {
             save();
         });
         General.WARN_ON_FOREIGN_PLACEMENT.setValueChangeCallback(config -> save());
+        General.HUD_ENABLED.setValueChangeCallback(config -> save());
+        General.HUD_SCALE.setValueChangeCallback(config -> save());
+        General.HUD_X.setValueChangeCallback(config -> save());
+        General.HUD_Y.setValueChangeCallback(config -> save());
+        General.HUD_MAX_ROWS.setValueChangeCallback(config -> save());
+        General.AUTO_COUNT_CONTAINERS.setValueChangeCallback(config -> save());
     }
 
     @Override
@@ -95,7 +103,39 @@ public final class ClientConfigs implements IConfigHandler {
             }
         };
 
+        public static final ConfigBoolean HUD_ENABLED = new ConfigBoolean(
+                "hudEnabled", true,
+                "cytra-syncmatica.config.comment.hud_enabled",
+                "cytra-syncmatica.config.name.hud_enabled");
+        public static final ConfigDouble HUD_SCALE = new ConfigDouble(
+                "hudScale", 1.0d, 0.5d, 2.0d, true,
+                "cytra-syncmatica.config.comment.hud_scale",
+                "cytra-syncmatica.config.name.hud_scale");
+        public static final ConfigInteger HUD_X = new ConfigInteger(
+                "hudX", 4, 0, 4000,
+                "cytra-syncmatica.config.comment.hud_x",
+                "cytra-syncmatica.config.name.hud_x");
+        public static final ConfigInteger HUD_Y = new ConfigInteger(
+                "hudY", 4, 0, 4000,
+                "cytra-syncmatica.config.comment.hud_y",
+                "cytra-syncmatica.config.name.hud_y");
+        public static final ConfigInteger HUD_MAX_ROWS = new ConfigInteger(
+                "hudMaxRows", 12, 1, 40,
+                "cytra-syncmatica.config.comment.hud_max_rows",
+                "cytra-syncmatica.config.name.hud_max_rows");
+        /** Whether the auto-count also looks at the container the player has open. */
+        public static final ConfigBoolean AUTO_COUNT_CONTAINERS = new ConfigBoolean(
+                "autoCountOpenContainers", true,
+                "cytra-syncmatica.config.comment.auto_count_containers",
+                "cytra-syncmatica.config.name.auto_count_containers");
+
         public static final List<IConfigBase> OPTIONS = ImmutableList.of(
+                HUD_ENABLED,
+                HUD_SCALE,
+                HUD_X,
+                HUD_Y,
+                HUD_MAX_ROWS,
+                AUTO_COUNT_CONTAINERS,
                 FOLLOW_CLAIMS,
                 WARN_ON_FOREIGN_PLACEMENT
         );
