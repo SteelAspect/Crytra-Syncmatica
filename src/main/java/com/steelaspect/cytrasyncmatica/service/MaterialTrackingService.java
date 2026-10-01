@@ -374,8 +374,12 @@ public class MaterialTrackingService extends AbstractService {
         if (list == null) {
             return CompletableFuture.failedFuture(new IllegalStateException("no material list for " + placement.getName()));
         }
+        return exportList(placement.getName(), list, folder);
+    }
+
+    /** Same for any list (a project's combined list, for one). */
+    public CompletableFuture<List<Path>> exportList(final String name, final MaterialList list, final Path folder) {
         final List<MaterialEntry> snapshot = list.copyEntries();
-        final String name = placement.getName();
         final Map<String, Integer> stackSizes = new HashMap<>();
         for (final MaterialEntry e : snapshot) {
             stackSizes.put(e.getItemId(), stackSizeOf(e.getItemId()));
@@ -456,6 +460,11 @@ public class MaterialTrackingService extends AbstractService {
     }
 
     // -- threading ---------------------------------------------------------------
+
+    /** Runs a small IO task on the material background thread (inline before startup). */
+    public void runInBackground(final Runnable task) {
+        runIo(task);
+    }
 
     private void runIo(final Runnable task) {
         final ExecutorService w = worker;

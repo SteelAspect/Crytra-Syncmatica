@@ -65,6 +65,8 @@ class SyncmaticaConfig:
     feed_edit: bool = True
     announce_item_completed: bool = True
     announce_group_completed: bool = True
+    announce_project_completed: bool = True
+    announce_project_changes: bool = True
     announce_schematic_completed: bool = True
     announce_schematic_shared: bool = True
 

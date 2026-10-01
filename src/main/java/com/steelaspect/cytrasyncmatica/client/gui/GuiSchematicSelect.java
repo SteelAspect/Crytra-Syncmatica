@@ -13,16 +13,31 @@ import java.util.function.Consumer;
 /** A simple list of buttons, one per schematic the tracker can show. */
 public class GuiSchematicSelect extends GuiBase {
     private final Consumer<TrackedSchematic> onSelect;
+    private final List<TrackedSchematic> candidates;
 
     public GuiSchematicSelect(final Consumer<TrackedSchematic> onSelect) {
+        this(null, StringUtils.translate("cytra-syncmatica.gui.title.schematic_select"), onSelect);
+    }
+
+    /** A picker over a given set (null = everything the tracker can show, projects included). */
+    public GuiSchematicSelect(final List<TrackedSchematic> candidates, final String title, final Consumer<TrackedSchematic> onSelect) {
         this.onSelect = onSelect;
-        title = StringUtils.translate("cytra-syncmatica.gui.title.schematic_select");
+        this.candidates = candidates;
+        this.title = title;
+    }
+
+    private List<TrackedSchematic> all() {
+        return candidates != null ? candidates : MaterialTrackerClient.getInstance().availableSchematics();
+    }
+
+    public static String label(final TrackedSchematic t) {
+        return t.isProject() ? StringUtils.translate("cytra-syncmatica.gui.label.project_prefix") + t.name() : t.name();
     }
 
     @Override
     public void initGui() {
         super.initGui();
-        final List<TrackedSchematic> all = MaterialTrackerClient.getInstance().availableSchematics();
+        final List<TrackedSchematic> all = all();
         int y = 30;
         int x = 10;
         final int w = Math.max(120, Math.min(width - 20, 260));
@@ -31,7 +46,7 @@ public class GuiSchematicSelect extends GuiBase {
                 y = 30;
                 x += w + 6;
             }
-            addButton(new ButtonGeneric(x, y, w, 20, t.name()), (b, m) -> {
+            addButton(new ButtonGeneric(x, y, w, 20, label(t)), (b, m) -> {
                 onSelect.accept(t);
                 closeGui(true);
             });
@@ -44,7 +59,7 @@ public class GuiSchematicSelect extends GuiBase {
 
     @Override
     public void drawContents(final GuiContext guiContext, final int mouseX, final int mouseY, final float partialTicks) {
-        if (MaterialTrackerClient.getInstance().availableSchematics().isEmpty()) {
+        if (all().isEmpty()) {
             drawStringWithShadow(guiContext, StringUtils.translate("cytra-syncmatica.gui.label.no_schematics"), 10, 30, 0xFFFFFFFF);
         }
     }

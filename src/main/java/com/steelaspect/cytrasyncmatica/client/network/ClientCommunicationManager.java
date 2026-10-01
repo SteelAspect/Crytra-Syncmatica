@@ -144,6 +144,15 @@ public class ClientCommunicationManager extends CommunicationManager {
             MaterialTrackerClient.getInstance().onServerUpdate(placementId, MaterialWire.readEntry(packetBuf));
             return;
         }
+        if (type == PacketType.PROJECT_LIST) {
+            final int n = ProtocolLimits.requireCount(packetBuf.readVarInt(), com.steelaspect.cytrasyncmatica.projects.Project.MAX_PROJECTS, "project count");
+            final java.util.List<com.steelaspect.cytrasyncmatica.projects.Project> projects = new java.util.ArrayList<>(n);
+            for (int i = 0; i < n; i++) {
+                projects.add(com.steelaspect.cytrasyncmatica.projects.Project.read(packetBuf));
+            }
+            com.steelaspect.cytrasyncmatica.client.materials.ClientProjects.getInstance().onServerList(projects);
+            return;
+        }
         if (type == PacketType.REGISTER_VERSION) {
             LitematicManager.clear();
             Syncmatica.restartClient();

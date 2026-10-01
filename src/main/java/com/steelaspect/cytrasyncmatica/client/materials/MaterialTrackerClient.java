@@ -11,7 +11,9 @@ import com.steelaspect.cytrasyncmatica.communication.FeatureSet;
 import com.steelaspect.cytrasyncmatica.communication.PacketType;
 import com.steelaspect.cytrasyncmatica.communication.ProtocolLimits;
 import com.steelaspect.cytrasyncmatica.materials.MaterialEntry;
+import com.steelaspect.cytrasyncmatica.materials.CombinedList;
 import com.steelaspect.cytrasyncmatica.materials.MaterialGroups;
+import com.steelaspect.cytrasyncmatica.projects.Project;
 import com.steelaspect.cytrasyncmatica.materials.MaterialList;
 import com.steelaspect.cytrasyncmatica.materials.MaterialOp;
 import fi.dy.masa.litematica.data.DataManager;
@@ -106,7 +108,16 @@ public final class MaterialTrackerClient {
 
     // -- schematics ----------------------------------------------------------------
 
+    /** Schematics first (sorted), then projects. */
     public List<TrackedSchematic> availableSchematics() {
+        final List<TrackedSchematic> out = new ArrayList<>(schematicsOnly());
+        for (final Project p : ClientProjects.getInstance().all()) {
+            out.add(TrackedSchematic.project(p));
+        }
+        return out;
+    }
+
+    public List<TrackedSchematic> schematicsOnly() {
         final List<TrackedSchematic> out = new ArrayList<>();
         if (currentMode() == MaterialMode.CONNECTED) {
             final Context context = Syncmatica.getContext(Syncmatica.CLIENT_CONTEXT);
@@ -122,6 +133,42 @@ public final class MaterialTrackerClient {
             out.add(TrackedSchematic.local(p));
         }
         return out;
+    }
+
+    /** The members of a project that currently exist, in project order. */
+    public List<TrackedSchematic> members(final Project project) {
+        final List<TrackedSchematic> out = new ArrayList<>();
+        final List<TrackedSchematic> all = schematicsOnly();
+        for (final String key : project.getMembers()) {
+            for (final TrackedSchematic t : all) {
+                if (t.key().equals(key)) {
+                    out.add(t);
+                    break;
+                }
+            }
+        }
+        return out;
+    }
+
+    public CombinedList.Combined combined(final Project project) {
+        final List<CombinedList.Source> sources = new ArrayList<>();
+        for (final TrackedSchematic m : members(project)) {
+            sources.add(new CombinedList.Source(m.key(), m.name(), getList(m)));
+        }
+        return CombinedList.combine(sources);
+    }
+
+    /** Which schematics of a project contribute how much to one item; empty for plain schematics. */
+    public List<CombinedList.Part> breakdown(final TrackedSchematic schematic, final String itemId) {
+        if (schematic == null || !schematic.isProject()) {
+            return List.of();
+        }
+        final List<CombinedList.Part> parts = combined(schematic.project()).breakdown().get(itemId);
+        return parts == null ? List.of() : parts;
+    }
+
+    public void notifyChanged() {
+        notifyListeners();
     }
 
     public TrackedSchematic find(final String key) {
@@ -160,6 +207,10 @@ public final class MaterialTrackerClient {
         if (schematic == null) {
             return null;
         }
+        if (schematic.isProject()) {
+            final CombinedList.Combined c = combined(schematic.project());
+            return c.list().isEmpty() && c.missingLists() > 0 ? null : c.list();
+        }
         if (schematic.isShared()) {
             final UUID id = schematic.server().getId();
             final MaterialList list = sharedLists.get(id);
@@ -185,6 +236,15 @@ public final class MaterialTrackerClient {
 
     public void refresh(final TrackedSchematic schematic) {
         if (schematic == null) {
+            return;
+        }
+        if (schematic.isProject()) {
+            for (final TrackedSchematic m : members(schematic.project())) {
+                refresh(m);
+            }
+            if (currentMode() == MaterialMode.CONNECTED) {
+                ClientProjects.getInstance().requestFromServer();
+            }
             return;
         }
         if (schematic.isShared()) {
@@ -293,14 +353,26 @@ public final class MaterialTrackerClient {
         if (schematic == null) {
             return;
         }
-        if (schematic.isShared()) {
+        if (schematic.isProject() && currentMode() != MaterialMode.CONNECTED) {
+            // split the edit over the local members, first schematic with something left first
+            final List<CombinedList.Part> parts = breakdown(schematic, itemId);
+            final Map<String, Integer> targets = CombinedList.distribute(parts, op, amount);
+            for (final TrackedSchematic m : members(schematic.project())) {
+                final Integer target = targets.get(m.key());
+                if (target != null) {
+                    edit(m, itemId, MaterialOp.SET, target);
+                }
+            }
+            return;
+        }
+        if (schematic.isShared() || schematic.isProject()) {
             final Context context = Syncmatica.getContext(Syncmatica.CLIENT_CONTEXT);
             if (context == null || !(context.getCommunicationManager() instanceof ClientCommunicationManager comms)) {
                 return;
             }
             final ExchangeTarget server = comms.getServer();
             final PacketByteBuf buf = new PacketByteBuf(Unpooled.buffer());
-            buf.writeUuid(schematic.server().getId());
+            buf.writeUuid(schematic.isProject() ? schematic.project().getId() : schematic.server().getId());
             buf.writeString(itemId, ProtocolLimits.MAX_ITEM_ID_LENGTH);
             buf.writeByte(op.ordinal());
             buf.writeInt(amount);
@@ -396,6 +468,7 @@ public final class MaterialTrackerClient {
 
     /** On disconnect: drop everything that belonged to the old world or server. */
     public void reset() {
+        ClientProjects.getInstance().reset();
         sharedLists.clear();
         sharedErrors.clear();
         requested.clear();

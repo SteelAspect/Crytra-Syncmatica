@@ -75,7 +75,7 @@ public class GuiMaterialTracker extends GuiListBase<MaterialEntry, WidgetMateria
 
     private void updateTitle() {
         title = StringUtils.translate("cytra-syncmatica.gui.title.material_tracker")
-                + (schematic == null ? "" : ": " + schematic.name());
+                + (schematic == null ? "" : ": " + GuiSchematicSelect.label(schematic));
     }
 
     @Override
@@ -84,6 +84,16 @@ public class GuiMaterialTracker extends GuiListBase<MaterialEntry, WidgetMateria
         MaterialTrackerClient.getInstance().addListener(refreshListener);
         int x = 10;
         x = addTopButton(x, StringUtils.translate("cytra-syncmatica.gui.button.schematic_select"), (b, m) -> openSchematicSelect());
+        x = addTopButton(x, StringUtils.translate("cytra-syncmatica.gui.button.projects"), (b, m) -> {
+            final GuiProjects gui = new GuiProjects(selected -> {
+                schematic = selected;
+                group = null;
+                MaterialTrackerPreferences.setLastSchematicKey(selected.key());
+                updateTitle();
+            });
+            gui.setParent(this);
+            openGui(gui);
+        });
         x = addTopButton(x, sortLabel(), (b, m) -> {
             MaterialTrackerPreferences.cycleSortMode();
             b.setDisplayString(sortLabel());
@@ -204,6 +214,12 @@ public class GuiMaterialTracker extends GuiListBase<MaterialEntry, WidgetMateria
             } else {
                 status += " · " + String.format(java.util.Locale.ROOT, "%.1f%%", list.percentComplete()) + " · "
                         + StringUtils.translate("cytra-syncmatica.gui.label.remaining_total", list.totalRemaining());
+                if (schematic.isProject()) {
+                    final int missing = tracker.combined(schematic.project()).missingLists();
+                    if (missing > 0) {
+                        status += " · " + StringUtils.translate("cytra-syncmatica.gui.label.lists_loading", missing);
+                    }
+                }
                 final MaterialList.GroupTotals g = group == null ? null : list.group(group);
                 if (g != null) {
                     status += " · " + g.name() + " " + String.format(java.util.Locale.ROOT, "%.0f%%", g.percent())

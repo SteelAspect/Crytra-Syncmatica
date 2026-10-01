@@ -54,9 +54,10 @@ class MaterialsView(discord.ui.View):
     from the mod on every refresh so several people can use the same message."""
 
     def __init__(self, bot: SyncmaticaBot, schematic_id: str, schematic_name: str, missing_only: bool, page: int = 0,
-                 group: str | None = None):
+                 group: str | None = None, target_key: str = "schematic_id"):
         super().__init__(timeout=VIEW_TIMEOUT)
         self.bot = bot
+        self.target_key = target_key  # "schematic_id" or "project_id"
         self.schematic_id = schematic_id
         self.schematic_name = schematic_name
         self.missing_only = missing_only
@@ -74,18 +75,18 @@ class MaterialsView(discord.ui.View):
         return self.bot.cfg.syncmatica.page_size
 
     async def fetch(self) -> None:
-        req = {"schematic_id": self.schematic_id, "missing_only": self.missing_only,
+        req = {self.target_key: self.schematic_id, "missing_only": self.missing_only,
                "offset": self.page * self.page_size, "limit": self.page_size}
         if self.group:
             req["group"] = self.group
         out = await self.bot.ext("get_materials", req)
         try:
-            self.groups = list((await self.bot.ext("get_groups", {"schematic_id": self.schematic_id})).get("groups") or [])
+            self.groups = list((await self.bot.ext("get_groups", {self.target_key: self.schematic_id})).get("groups") or [])
         except LinkError:
             self.groups = []
         self.items = list(out.get("items") or [])
         self.summary = out.get("summary") or {}
-        self.schematic_name = out.get("schematic", self.schematic_name)
+        self.schematic_name = out.get("schematic") or out.get("project") or self.schematic_name
         total = int(out.get("total", 0))
         self.pages = max(1, math.ceil(total / self.page_size))
         if self.page >= self.pages:
@@ -182,7 +183,7 @@ class MaterialsView(discord.ui.View):
                 "Link your Minecraft account first: `/cytra-syncmatica link` in game, then `/link <code>` here.", ephemeral=True)
             return
         try:
-            out = await self.bot.ext("material_action", {"schematic_id": self.schematic_id, "item": item, "action": action,
+            out = await self.bot.ext("material_action", {self.target_key: self.schematic_id, "item": item, "action": action,
                                                          "amount": amount, "mc_uuid": player[0]})
         except LinkError as exc:
             await interaction.response.send_message(f"The server refused that: {exc}", ephemeral=True)
@@ -209,6 +210,36 @@ class MaterialsView(discord.ui.View):
                 await self.message.edit(view=self)
             except discord.HTTPException:
                 pass
+
+
+def shopping_embed_and_file(server_name: str, out: dict, fallback_name: str, as_file: bool):
+    """Returns (embed, discord.File | None) for a get_shopping_list reply."""
+    text = out.get("text") or ""
+    base = out.get("schematic") or out.get("project") or fallback_name
+    title = base + (f" · {out['group']}" if out.get("group") else "")
+    lines = list(out.get("lines") or [])
+    e = discord.Embed(title=f"Shopping list: {title}", colour=ui.Palette.GOLD if lines else ui.Palette.OK)
+    e.set_author(name=server_name)
+    if not lines:
+        e.description = "Nothing left to gather."
+        return e, None
+    e.description = (f"**{out.get('total_items', 0):,}** items in {out.get('total_lines', len(lines))} lines · "
+                     f"about **{out.get('shulker_boxes', 0)}** shulker boxes")
+    body = "\n".join(f"**{l['group']}** · {ui.item_name(l['item'])}: `{l['text']}` ({l['remaining']:,})" for l in lines)
+    if as_file or len(body) > 3500 or len(lines) > 40:
+        e.add_field(name="List", value="attached as a text file (too long for one message)", inline=False)
+        return e, discord.File(io.BytesIO(text.encode("utf-8")), filename=f"shopping-{base.replace(' ', '_')}.txt")
+    current = None
+    chunk: list[str] = []
+    for l in lines:
+        if l["group"] != current:
+            if chunk:
+                e.add_field(name=current, value="\n".join(chunk)[:1024], inline=False)
+            current, chunk = l["group"], []
+        chunk.append(f"▫️ {ui.item_name(l['item'])}: `{l['text']}` ({l['remaining']:,})")
+    if chunk:
+        e.add_field(name=current, value="\n".join(chunk)[:1024], inline=False)
+    return e, None
 
 
 class Schematics(commands.Cog):
@@ -279,34 +310,11 @@ class Schematics(commands.Cog):
         if group:
             req["group"] = group
         out = await self.bot.ext("get_shopping_list", req)
-        text = out.get("text") or ""
-        title = out.get("schematic", name) + (f" · {out['group']}" if out.get("group") else "")
-        lines = list(out.get("lines") or [])
-        e = discord.Embed(title=f"Shopping list: {title}", colour=ui.Palette.GOLD if lines else ui.Palette.OK)
-        e.set_author(name=self.cfg.server.name)
-        if not lines:
-            e.description = "Nothing left to gather."
+        e, f = shopping_embed_and_file(self.cfg.server.name, out, name, as_file)
+        if f is not None:
+            await interaction.followup.send(embed=e, file=f)
+        else:
             await interaction.followup.send(embed=e)
-            return
-        e.description = (f"**{out.get('total_items', 0):,}** items in {out.get('total_lines', len(lines))} lines · "
-                         f"about **{out.get('shopping_boxes', out.get('shulker_boxes', 0))}** shulker boxes")
-        body = "\n".join(f"**{l['group']}** · {ui.item_name(l['item'])}: `{l['text']}` ({l['remaining']:,})" for l in lines)
-        if as_file or len(body) > 3500 or len(lines) > 40:
-            e.add_field(name="List", value="attached as a text file (too long for one message)", inline=False)
-            fname = f"shopping-{out.get('schematic', name).replace(' ', '_')}.txt"
-            await interaction.followup.send(embed=e, file=discord.File(io.BytesIO(text.encode("utf-8")), filename=fname))
-            return
-        current = None
-        chunk: list[str] = []
-        for l in lines:
-            if l["group"] != current:
-                if chunk:
-                    e.add_field(name=current, value="\n".join(chunk)[:1024], inline=False)
-                current, chunk = l["group"], []
-            chunk.append(f"▫️ {ui.item_name(l['item'])}: `{l['text']}` ({l['remaining']:,})")
-        if chunk:
-            e.add_field(name=current, value="\n".join(chunk)[:1024], inline=False)
-        await interaction.followup.send(embed=e)
 
     @schematic.command(name="where", description="Dimension and coordinates of a shared schematic")
     @app_commands.describe(name="Schematic name")

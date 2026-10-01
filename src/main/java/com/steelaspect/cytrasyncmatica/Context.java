@@ -33,6 +33,7 @@ public class Context {
     private final BuildService buildService;
     private final MaterialTrackingService materialTracking;
     private final BridgeService bridge;
+    private final ProjectService projects;
     private MinecraftServer minecraftServer;
     private ConfigRegistry configRegistry;
     private ConfigStore configStore;
@@ -43,6 +44,7 @@ public class Context {
     private boolean sharingStarted;
     private boolean materialsStarted;
     private boolean bridgeStarted;
+    private boolean projectsStarted;
     private boolean buildStarted;
     private boolean debugStarted;
     private boolean managerStarted;
@@ -83,12 +85,15 @@ public class Context {
             materialTracking.setContext(this);
             bridge = new BridgeService();
             bridge.setContext(this);
+            projects = new ProjectService();
+            projects.setContext(this);
         } else {
             quota = null;
             sharingService = null;
             buildService = null;
             materialTracking = null;
             bridge = null;
+            projects = null;
         }
         playerIdentifierProvider = new PlayerIdentifierProvider(this);
         debugService = new DebugService();
@@ -131,6 +136,11 @@ public class Context {
     }
 
     /** Server side only; null on a client context. Works without Cytra Link (then only queues). */
+    /** null on the client. */
+    public ProjectService getProjects() {
+        return projects;
+    }
+
     public BridgeService getBridge() {
         return bridge;
     }
@@ -243,6 +253,10 @@ public class Context {
             if (materialTracking != null) {
                 materialTracking.startup();
                 materialsStarted = true;
+            }
+            if (projects != null) {
+                projects.startup();
+                projectsStarted = true;
             }
             if (bridge != null) {
                 bridge.startup();
@@ -438,6 +452,10 @@ public class Context {
         if (bridgeStarted) {
             stop(bridge::shutdown, startupFailure);
             bridgeStarted = false;
+        }
+        if (projectsStarted) {
+            stop(projects::shutdown, startupFailure);
+            projectsStarted = false;
         }
         if (materialsStarted) {
             stop(materialTracking::shutdown, startupFailure);

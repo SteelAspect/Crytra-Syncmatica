@@ -119,4 +119,24 @@ public class WidgetMaterialTrackerEntry extends WidgetListEntryBase<MaterialEntr
     private void drawRight(final GuiContext ctx, final String text, final int rightX, final int y, final int color) {
         drawString(ctx, rightX - getStringWidth(text), y, color, text);
     }
+
+    @Override
+    public void postRenderHovered(final GuiContext guiContext, final int mouseX, final int mouseY, final boolean selected) {
+        super.postRenderHovered(guiContext, mouseX, mouseY, selected);
+        if (schematic == null || !schematic.isProject() || mouseX > x + width / 2) {
+            return;
+        }
+        final java.util.List<com.steelaspect.cytrasyncmatica.materials.CombinedList.Part> parts =
+                MaterialTrackerClient.getInstance().breakdown(schematic, entry.getItemId());
+        if (parts.isEmpty()) {
+            return;
+        }
+        final java.util.List<String> lines = new java.util.ArrayList<>();
+        lines.add(StringUtils.translate("cytra-syncmatica.gui.label.breakdown"));
+        for (final com.steelaspect.cytrasyncmatica.materials.CombinedList.Part p : parts) {
+            lines.add("  " + p.label() + ": " + p.gathered() + " / " + p.required()
+                    + (p.remaining() == 0 ? " ✓" : "  (" + p.remaining() + " left)"));
+        }
+        RenderUtils.drawHoverText(guiContext, mouseX, mouseY, lines);
+    }
 }

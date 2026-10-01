@@ -44,6 +44,8 @@ class FakeSyncmaticaExtension:
         self.codes = {"K7P2XQ": (OP_UUID, "OpPlayer")}
         self.actions: list[dict] = []
         self.hide_coordinates = False
+        self.projects: dict[str, dict] = {}  # id -> {"id", "name", "members": [schematic ids]}
+        self.project_actions: list[dict] = []
 
     GROUPS = {"minecraft:stone": "Stone", "minecraft:oak_planks": "Wood", "minecraft:oak_door": "Wood",
               "minecraft:stone_slab": "Stone", "minecraft:glass": "Glass"}
@@ -81,7 +83,70 @@ class FakeSyncmaticaExtension:
             s["centre"] = {"x": 123, "y": 66, "z": -337}
         return s
 
+    def project(self, p):
+        members = [{"id": SCHEMATIC_ID, "name": "Iron farm", "dimension": "minecraft:overworld", "materials": self.summary()}
+                   for sid in p["members"] if sid == SCHEMATIC_ID]
+        summary = self.summary() if members else {"available": True, "items": 0, "required": 0, "gathered": 0, "remaining": 0,
+                                                   "percent": 100.0, "complete": True, "groups": 0}
+        summary = dict(summary, lists_missing=0)
+        return {"id": p["id"], "name": p["name"], "created_by": "OpPlayer", "created_at": 3, "members": members, "materials": summary}
+
+    def find_project(self, payload):
+        pid, name = payload.get("project_id"), payload.get("project")
+        for p in self.projects.values():
+            if p["id"] == pid or (name and p["name"].lower() == name.lower()):
+                return p
+        raise ExtensionError(f"unknown project {name or pid}")
+
     def __call__(self, op, v, payload):
+        if op in ("get_materials", "get_groups", "get_shopping_list", "get_where", "material_action") and (payload.get("project") or payload.get("project_id")):
+            p = self.find_project(payload)
+            if not p["members"]:
+                raise ExtensionError(f"no material list yet for project {p['name']}")
+            if op == "get_where":
+                return {"project_id": p["id"], "project": p["name"], "coordinates_hidden": self.hide_coordinates,
+                        "schematics": [self("get_where", v, {"schematic_id": SCHEMATIC_ID})]}
+            if op == "material_action":
+                self.actions.append(payload)
+            out = self(op, v, dict(payload, schematic_id=SCHEMATIC_ID, project=None, project_id=None, _inner=True))
+            out.pop("schematic_id", None); out.pop("schematic", None)
+            out.update({"project_id": p["id"], "project": p["name"]})
+            for it in out.get("items") or []:
+                it["parts"] = [{"schematic_id": SCHEMATIC_ID, "schematic": "Iron farm", "required": it["required"], "gathered": it["gathered"], "remaining": it["remaining"]}]
+            return out
+        if op == "list_projects":
+            return {"projects": [self.project(p) for p in self.projects.values()]}
+        if op == "get_project":
+            p = self.find_project(payload)
+            return {"project": self.project(p), "top_remaining": [self.entry(i) for i in self.items if self.items[i][1] < self.items[i][0]][:5]}
+        if op == "project_action":
+            self.project_actions.append(payload)
+            uuid, action = payload.get("mc_uuid"), payload.get("action")
+            if uuid not in self.known:
+                raise ExtensionError(f"unknown player {uuid}: never joined this server")
+            if uuid not in self.ops:
+                raise ExtensionError(f"player {self.known[uuid]} is not permitted to manage projects (needs cytra-syncmatica.project.manage)")
+            changed = True
+            if action == "create":
+                name = str(payload.get("name", "")).strip()
+                if not name or any(p["name"].lower() == name.lower() for p in self.projects.values()):
+                    raise ExtensionError("a project with that name already exists" if name else "project name is empty")
+                pid = f"p{len(self.projects) + 1}"
+                p = self.projects[pid] = {"id": pid, "name": name, "members": []}
+            else:
+                p = self.find_project(payload)
+                if action == "delete":
+                    del self.projects[p["id"]]
+                elif action in ("add", "remove"):
+                    if payload.get("schematic") not in ("Iron farm", "iron_farm") and payload.get("schematic_id") != SCHEMATIC_ID:
+                        raise ExtensionError(f"unknown schematic {payload.get('schematic')}")
+                    if action == "add":
+                        changed = SCHEMATIC_ID not in p["members"]
+                        if changed: p["members"].append(SCHEMATIC_ID)
+                    else:
+                        changed = SCHEMATIC_ID in p["members"]
+                        if changed: p["members"].remove(SCHEMATIC_ID)
+            return {"action": action, "changed": changed, "project": self.project(p)}
         if op == "ping":
             return {"mod": "1.0.0+1.21.11", "protocol": 1, "schematics": 1, "materials_enabled": True,
                     "coordinates_hidden": self.hide_coordinates, "queued_events": 0, "ops": ["ping"]}
@@ -126,7 +191,8 @@ class FakeSyncmaticaExtension:
         if op == "get_groups":
             return {"schematic_id": SCHEMATIC_ID, "schematic": "Iron farm", "summary": self.summary(), "groups": self.groups()}
         if op == "material_action":
-            self.actions.append(payload)
+            if not payload.get("_inner"):
+                self.actions.append(payload)
             uuid, item, action = payload.get("mc_uuid"), payload.get("item"), payload.get("action")
             if uuid not in self.known:
                 raise ExtensionError(f"unknown player {uuid}: never joined this server")

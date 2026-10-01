@@ -51,7 +51,7 @@ a UUID prefix of at least 8 characters).
 {"t":"ext","id":1,"ns":"cytra-syncmatica","v":1,"op":"ping","payload":{}}
 ```
 ```json
-{"t":"res","id":1,"ok":true,"out":{"mod":"1.0.0+1.21.11","protocol":1,"schematics":3,"materials_enabled":true,"coordinates_hidden":false,"queued_events":0,"ops":["ping","list_schematics","get_schematic","get_materials","get_groups","get_shopping_list","get_where","material_action","link_claim"]}}
+{"t":"res","id":1,"ok":true,"out":{"mod":"1.0.0+1.21.11","protocol":1,"schematics":3,"materials_enabled":true,"coordinates_hidden":false,"queued_events":0,"ops":["ping","list_schematics","get_schematic","get_materials","get_groups","get_shopping_list","get_where","material_action","list_projects","get_project","project_action","link_claim"]}}
 ```
 
 ### `list_schematics`
@@ -151,6 +151,30 @@ nothing is left.
 `shulker_boxes` counts whole boxes per item (each item boxed separately).
 Same errors as `get_materials`.
 
+### Targets: schematic or project
+
+Every request that names a schematic (`get_materials`, `get_groups`,
+`get_shopping_list`, `get_where`, `material_action`) also accepts a project
+instead: `"project_id"` or `"project"` (name, case-insensitive, unique prefix
+allowed) win over `"schematic_id"` / `"schematic"`. The reply then carries
+`project_id` + `project` in place of `schematic_id` + `schematic`, the list is
+the project's **combined** list (required and gathered summed over its
+members), and every item has a `parts` array with the per-schematic split:
+
+```json
+{"item":"minecraft:stone","required":150,"gathered":90,"remaining":60,"complete":false,"group":"Stone","stack_size":64,"remaining_text":"60","editor":{"uuid":"069a79f4-44e9-4726-a5be-fca90e38aaf5","name":"Notch"},"edited_at":1790000600000,"parts":[
+  {"schematic_id":"8f2a6c1e-1b2c-4d3e-9f00-112233445566","schematic":"Iron farm","required":100,"gathered":40,"remaining":60},
+  {"schematic_id":"1c3b7d2f-aaaa-4bbb-8ccc-556677889900","schematic":"Gold farm","required":50,"gathered":50,"remaining":0}
+]}
+```
+
+A `material_action` on a project is split over its members: `add` fills the
+first schematic with something left first, a negative `add` takes back from
+the last, `set` is an `add` of the difference, `done` / `reset` apply to
+every member. `get_where` on a project returns `"schematics": [ ...one
+get_where reply per member... ]`. Errors: `unknown project <name>`, `no
+material list yet for project <name>` (no member has a list yet).
+
 ### `get_where`
 
 ```json
@@ -200,6 +224,53 @@ through fabric-permissions-api, offline players included).
 | `player <name> is not permitted to <action> (needs <node>)` | permission check failed |
 | `unknown item <id> in <schematic>` | item is not in that schematic's list |
 | `no material list yet for <schematic>` / `material tracking is disabled` | nothing to edit |
+
+### `list_projects`
+
+```json
+{"t":"ext","id":11,"ns":"cytra-syncmatica","v":1,"op":"list_projects","payload":{}}
+```
+```json
+{"t":"res","id":11,"ok":true,"out":{"projects":[
+  {"id":"5d1e2f3a-1111-4222-8333-444455556666","name":"Base","created_by":"Notch","created_at":1790000000000,"members":[
+    {"id":"8f2a6c1e-1b2c-4d3e-9f00-112233445566","name":"Iron farm","dimension":"minecraft:overworld","origin":{"x":120,"y":64,"z":-340},"materials":{"available":true,"items":5,"required":138,"gathered":40,"remaining":98,"percent":29.0,"complete":false,"groups":3}}
+  ],"materials":{"available":true,"items":5,"required":138,"gathered":40,"remaining":98,"percent":29.0,"complete":false,"groups":3,"lists_missing":0}}
+]}}
+```
+
+`origin` is left out of members when `bridge.hide_coordinates` is on.
+`materials.lists_missing` counts members whose list is not built yet.
+
+### `get_project`
+
+Payload: `"project_id"` or `"project"`. Reply: `"project"` (as above) plus
+`"top_remaining"` (up to five combined items with the most left).
+
+### `project_action`
+
+Creates or changes a project on behalf of a Minecraft player; the mod checks
+`cytra-syncmatica.project.manage` (fallback op level 2) for `mc_uuid` the way
+`material_action` checks the material permissions.
+
+| `action` | payload | effect |
+|---|---|---|
+| `create` | `name` | new empty project |
+| `rename` | project target + `name` | rename |
+| `delete` | project target | delete (schematics stay shared) |
+| `add` | project target + schematic target | add a member |
+| `remove` | project target + schematic target | remove a member |
+
+```json
+{"t":"ext","id":12,"ns":"cytra-syncmatica","v":1,"op":"project_action","payload":{"action":"add","project":"Base","schematic":"Iron farm","mc_uuid":"069a79f4-44e9-4726-a5be-fca90e38aaf5"}}
+```
+```json
+{"t":"res","id":12,"ok":true,"out":{"action":"add","changed":true,"project":{ ...list_projects entry... }}}
+```
+
+`changed` is `false` when the member was already there (or not there, for
+`remove`). Errors: `unknown project`, `a project named 'X' already exists`,
+`project name is empty`, `too many projects (max 256)`, the permission and
+unknown-player errors of `material_action`.
 
 ### `link_claim`
 
@@ -288,6 +359,25 @@ flushed first.
 {"t":"ev","ns":"cytra-syncmatica","v":1,"type":"schematic_completed","payload":{"schematic":{ ...list_schematics entry... },"editor":{"uuid":"069a79f4-44e9-4726-a5be-fca90e38aaf5","name":"Notch"}},"ts":1790000800000}
 ```
 
+### `project_changed`
+
+After `create`, `rename`, `add`, `remove` or `delete` (also when a shared
+schematic is removed and drops out of a project). `action` is one of
+`created`, `renamed`, `member_added`, `member_removed`, `deleted`; `by` is the
+acting player or `null`.
+
+```json
+{"t":"ev","ns":"cytra-syncmatica","v":1,"type":"project_changed","payload":{"action":"member_added","project":{ ...list_projects entry... },"by":{"uuid":"069a79f4-44e9-4726-a5be-fca90e38aaf5","name":"Notch"}},"ts":1790000800000}
+```
+
+### `project_completed`
+
+Every item of every member is gathered (once per edit that completes it).
+
+```json
+{"t":"ev","ns":"cytra-syncmatica","v":1,"type":"project_completed","payload":{"project":{ ...list_projects entry... },"editor":{"uuid":"069a79f4-44e9-4726-a5be-fca90e38aaf5","name":"Notch"}},"ts":1790000900000}
+```
+
 ### `resync`
 
 Sent to a bot right after it attaches (first connection or reconnect), after
@@ -310,7 +400,6 @@ Live changes: `/cytra-syncmatica config set bridge <key> <value>`.
 
 ## Not yet in this version
 
-Projects (`list_projects`, `get_project`, project targets),
-`get_layers`, `get_preview` and the `layer_completed`,
-`project_completed` events are added by the Step 3 extras and documented here
-as they land. Until then they answer `unknown op <op>`.
+`get_layers`, `get_preview` and the `layer_completed` event are added by the
+remaining Step 3 extras and documented here as they land. Until then they
+answer `unknown op <op>`.

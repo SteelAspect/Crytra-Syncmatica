@@ -58,6 +58,7 @@ config, the UI, the lang files, the docs and the build:
 | permissions `syncmatica_r.share`, `.build.claim`, `.manage`, `.command`, `.command.load`, `.config` | `cytra-syncmatica.share`, `.build.claim`, `.manage`, `.command`, `.command.load`, `.config` |
 | config `config/syncmatica_r/config.json`, `client.json`; world `<world>/syncmatica_r/` | `config/cytra-syncmatica/config.json`, `client.json`; `<world>/cytra-syncmatica/` |
 | config section `materials.max_schematic_megabytes` | `sharing.max_schematic_megabytes` (the only `materials.*` key sharing/build management needed) |
+| `/syncmatica_r <name> rescanBuild` | `/cytra-syncmatica rescan <name>` (the word "project" now means a set of schematics) |
 | mixin configs `syncmatica_r.mixin.json`, `syncmatica_r.litematica_mixin.json` | `cytra-syncmatica.mixin.json`, `cytra-syncmatica.litematica_mixin.json` (the Litematica one is client-only) |
 | lang keys `syncmatica_r.*` | `cytra-syncmatica.*` (157 → 75 keys after removals) |
 | server litematic folder `./syncmatics` | unchanged |
@@ -130,7 +131,21 @@ config, the UI, the lang files, the docs and the build:
   client a "Shopping list" screen (minus what you carry, group filter, copy
   to clipboard, export to `config/cytra-syncmatica/exports/<name>-shopping.txt`).
   Bridge: `get_shopping_list`.
+- Projects (Step 3.6): named sets of shared schematics tracked as one
+  combined material list (`<world>/cytra-syncmatica/projects.json`).
+  `/cytra-syncmatica project list|info|create|delete|add|remove`; `where`,
+  `shopping` and `export` accept a project name. An edit on a combined item
+  fills the first schematic with something left first. Permission
+  `cytra-syncmatica.project.manage` (fallback op level 2) for changes.
+  Client: a Projects screen (new project, add/remove schematics, open) in
+  every mode; client-only and singleplayer keep projects in
+  `config/cytra-syncmatica/client/<server-or-world>/projects.json`; the
+  material screen shows a project's combined list with a per-schematic
+  breakdown on hover. Bridge: `list_projects`, `get_project`,
+  `project_action`, project targets on every list request, `parts` per
+  item, events `project_changed` / `project_completed`. New packets
+  `project_list` / `project_request` / `project_manage`.
 - Standalone Discord bot in `bot/` (own application, config, SQLite):
   `/link`, `/unlink`, `/whoami`, `/links`, `/schematic list|info|materials|where`,
-  `/schematic groups`, `/schematic shopping`, `/materials`, a group filter in the materials view,
+  `/schematic groups`, `/schematic shopping`, `/materials`, `/project …`, a group filter in the materials view,
   live feed channel.

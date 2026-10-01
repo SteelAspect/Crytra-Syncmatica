@@ -3,6 +3,7 @@ package com.steelaspect.cytrasyncmatica.service;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
+import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 import com.steelaspect.cytrasyncmatica.Context;
@@ -221,6 +222,89 @@ final class MaterialTrackingServiceTest {
             }
             assertTrue(Files.isRegularFile(stored), "material file persisted");
             assertTrue(Files.readString(stored).contains("\"gathered\": 7"), Files.readString(stored));
+        } finally {
+            context.shutdown();
+        }
+    }
+
+    @Test
+    void projectsCombineMemberListsSplitEditsAndReportCompletion() throws Exception {
+        final Context context = newServerContext();
+        try {
+            context.startup();
+            final MaterialTrackingService materials = context.getMaterialTracking();
+            materials.setResolver(RESOLVER);
+            final ProjectService projects = context.getProjects();
+            final List<String> events = java.util.Collections.synchronizedList(new ArrayList<>());
+            projects.addListener(new ProjectService.Listener() {
+                @Override
+                public void onProjectChanged(final com.steelaspect.cytrasyncmatica.projects.Project p, final String action, final PlayerIdentifier by) {
+                    events.add(action);
+                }
+
+                @Override
+                public void onProjectCompleted(final com.steelaspect.cytrasyncmatica.projects.Project p, final PlayerIdentifier editor) {
+                    events.add("project_complete:" + p.getName());
+                }
+            });
+            final List<String> created = java.util.Collections.synchronizedList(new ArrayList<>());
+            materials.addListener(new MaterialEventListener() {
+                @Override
+                public void onListCreated(final ServerPlacement p, final MaterialList l) {
+                    created.add(p.getName());
+                }
+            });
+            final UUID hash = writeLitematic(context);
+            final ServerPlacement a = new ServerPlacement(UUID.randomUUID(), "farm A", hash, PlayerIdentifier.MISSING_PLAYER);
+            a.move("minecraft:overworld", BlockPos.ORIGIN, BlockRotation.NONE, BlockMirror.NONE);
+            final ServerPlacement b = new ServerPlacement(UUID.randomUUID(), "farm B", hash, PlayerIdentifier.MISSING_PLAYER);
+            b.move("minecraft:overworld", new BlockPos(10, 0, 0), BlockRotation.NONE, BlockMirror.NONE);
+            context.getSyncmaticManager().addPlacement(a);
+            context.getSyncmaticManager().addPlacement(b);
+            final long deadline = System.currentTimeMillis() + 10_000L;
+            while (System.currentTimeMillis() < deadline && created.size() < 2) {
+                Thread.sleep(10L);
+            }
+            assertEquals(2, created.size(), "both lists built");
+
+            final PlayerIdentifier alex = context.getPlayerIdentifierProvider().createOrGet(UUID.randomUUID(), "Alex");
+            final com.steelaspect.cytrasyncmatica.projects.Project project = projects.create("Farms", alex);
+            assertTrue(projects.addMember(project, a, alex));
+            assertTrue(projects.addMember(project, b, alex));
+            assertFalse(projects.addMember(project, b, alex), "no duplicates");
+            assertEquals(List.of("created", "member_added", "member_added"), events);
+            assertEquals(project, projects.findByName("farms").orElse(null));
+            assertEquals(project, projects.findByName("Fa").orElse(null), "unique prefix");
+            assertThrows(IllegalArgumentException.class, () -> projects.create("FARMS", alex));
+
+            com.steelaspect.cytrasyncmatica.materials.CombinedList.Combined c = projects.combined(project);
+            assertEquals(0, c.missingLists());
+            assertEquals(40, c.list().get("minecraft:stone").getRequired());
+            assertEquals(2, c.breakdown().get("minecraft:stone").size());
+
+            // an edit on the project fills farm A first, the overflow goes to farm B
+            assertEquals(ProjectService.Outcome.OK, projects.apply(project, "minecraft:stone", MaterialOp.ADD, 25, alex));
+            assertEquals(20, materials.getList(a).get("minecraft:stone").getGathered());
+            assertEquals(5, materials.getList(b).get("minecraft:stone").getGathered());
+            assertEquals(ProjectService.Outcome.UNKNOWN_ITEM, projects.apply(project, "minecraft:bedrock", MaterialOp.ADD, 1, alex));
+            assertEquals(ProjectService.Outcome.NO_CHANGE, projects.apply(project, "minecraft:stone", MaterialOp.ADD, 0, alex));
+
+            for (final String item : List.of("minecraft:stone", "minecraft:oak_door", "minecraft:stone_slab")) {
+                projects.apply(project, item, MaterialOp.DONE, 0, alex);
+            }
+            assertTrue(events.contains("project_complete:Farms"), events.toString());
+            assertTrue(projects.isComplete(project));
+            assertEquals(1, events.stream().filter(e -> e.startsWith("project_complete")).count(), "fired once");
+
+            // persistence + removal of a member when its placement goes away
+            Thread.sleep(300L);
+            final Path stored = tempDir.resolve("cytra-syncmatica").resolve("projects.json");
+            assertTrue(Files.isRegularFile(stored));
+            assertTrue(Files.readString(stored).contains("\"Farms\""));
+            projects.onPlacementRemoved(b.getId());
+            assertEquals(List.of(a.getId().toString()), project.getMembers());
+            assertTrue(projects.delete(project, alex));
+            assertTrue(projects.all().isEmpty());
         } finally {
             context.shutdown();
         }

@@ -101,6 +101,37 @@ def groups_embed(target_name: str, server_name: str, summary: dict, groups: list
     return e
 
 
+def project_line(p: dict) -> str:
+    m = p.get("materials") or {}
+    pct = f"{m['percent']:.0f}%" if m.get("available") and m.get("items") else "no materials yet"
+    return f"**{p['name']}** · {len(p.get('members') or [])} schematic(s) · {pct}"
+
+
+def project_embed(p: dict, server_name: str, top_remaining: list[dict] | None = None) -> discord.Embed:
+    m = p.get("materials") or {}
+    e = discord.Embed(title=f"Project: {p.get('name', '?')}", colour=Palette.OK if m.get("complete") and m.get("items") else Palette.INFO)
+    e.set_author(name=f"{server_name} · project")
+    if p.get("created_by"):
+        e.add_field(name="Created by", value=p["created_by"], inline=True)
+    members = p.get("members") or []
+    if members:
+        lines = []
+        for s in members:
+            sm = s.get("materials") or {}
+            pct = f"{sm['percent']:.0f}%" if sm.get("available") else "no list yet"
+            lines.append(f"▫️ **{s['name']}** · {str(s.get('dimension', '')).replace('minecraft:', '')} · {pct}")
+        e.add_field(name=f"Schematics ({len(members)})", value="\n".join(lines)[:1024], inline=False)
+    else:
+        e.add_field(name="Schematics", value="none yet · `/project add`", inline=False)
+    if m.get("available") and m.get("items"):
+        extra = f" · {m['lists_missing']} list(s) still loading" if m.get("lists_missing") else ""
+        e.add_field(name="Combined materials", value=f"{progress_bar(m['percent'])} {m['percent']:.1f}% · {m['remaining']:,} of {m['required']:,} items still needed{extra}", inline=False)
+    if top_remaining:
+        e.add_field(name="Most needed", value=", ".join(f"{item_name(t['item'])} ({t['remaining_text']})" for t in top_remaining[:5]), inline=False)
+    e.set_footer(text=f"id {p.get('id', '?')[:8]}")
+    return e
+
+
 def where_embed(w: dict, server_name: str) -> discord.Embed:
     e = discord.Embed(title=f"Where is {w.get('schematic', '?')}?", colour=Palette.INFO)
     e.set_author(name=server_name)

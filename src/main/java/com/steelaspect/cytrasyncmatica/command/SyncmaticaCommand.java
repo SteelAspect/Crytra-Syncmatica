@@ -62,7 +62,8 @@ public final class SyncmaticaCommand {
                 .then(whereArgument())
                 .then(shoppingArgument())
                 .then(linkArgument())
-                .then(projectArgument());
+                .then(projectCommands())
+                .then(rescanArgument());
         dispatcher.register(root);
     }
 
@@ -108,18 +109,25 @@ public final class SyncmaticaCommand {
         }
         final String name = context.getArgument("schematic", String.class);
         final Optional<ServerPlacement> placement = findPlacementByName(syncmaticaContext, name);
-        if (placement.isEmpty()) {
-            context.getSource().sendError(literal("Unknown shared schematic: " + name));
+        final Optional<com.steelaspect.cytrasyncmatica.projects.Project> project = placement.isPresent() || syncmaticaContext.getProjects() == null
+                ? Optional.empty() : syncmaticaContext.getProjects().findByName(name);
+        if (placement.isEmpty() && project.isEmpty()) {
+            context.getSource().sendError(literal("Unknown shared schematic or project: " + name));
             return 0;
         }
         final java.nio.file.Path folder = new File(syncmaticaContext.getConfigFolder(), "exports").toPath();
         final ServerCommandSource source = context.getSource();
-        syncmaticaContext.getMaterialTracking().export(placement.get(), folder).whenComplete((paths, error) -> {
+        final String exportName = placement.isPresent() ? placement.get().getName() : project.get().getName();
+        final CompletableFuture<List<java.nio.file.Path>> export = placement.isPresent()
+                ? syncmaticaContext.getMaterialTracking().export(placement.get(), folder)
+                : syncmaticaContext.getMaterialTracking().exportList(exportName,
+                        syncmaticaContext.getProjects().combined(project.get()).list(), folder);
+        export.whenComplete((paths, error) -> {
             final Runnable reply = () -> {
                 if (error != null) {
                     source.sendError(literal("Export failed: " + error.getMessage()));
                 } else {
-                    source.sendFeedback(() -> literal("Exported materials of '" + placement.get().getName() + "' to "
+                    source.sendFeedback(() -> literal("Exported materials of '" + exportName + "' to "
                             + paths.get(0).getFileName() + " and " + paths.get(1).getFileName() + " in " + folder), false);
                 }
             };
@@ -156,20 +164,25 @@ public final class SyncmaticaCommand {
             name = name.substring(0, at).trim();
         }
         final Optional<ServerPlacement> found = findPlacementByName(syncmaticaContext, name);
-        if (found.isEmpty()) {
-            context.getSource().sendError(literal("Unknown shared schematic: " + name));
+        final Optional<com.steelaspect.cytrasyncmatica.projects.Project> project = found.isPresent() || syncmaticaContext.getProjects() == null
+                ? Optional.empty() : syncmaticaContext.getProjects().findByName(name);
+        if (found.isEmpty() && project.isEmpty()) {
+            context.getSource().sendError(literal("Unknown shared schematic or project: " + name));
             return 0;
         }
-        final com.steelaspect.cytrasyncmatica.materials.MaterialList list = syncmaticaContext.getMaterialTracking().getList(found.get());
+        final com.steelaspect.cytrasyncmatica.materials.MaterialList list = found.isPresent()
+                ? syncmaticaContext.getMaterialTracking().getList(found.get())
+                : syncmaticaContext.getProjects().combined(project.get()).list();
+        final String targetName = found.isPresent() ? found.get().getName() : project.get().getName();
         if (list == null) {
             final String error = syncmaticaContext.getMaterialTracking().getExtractionError(found.get().getId());
-            context.getSource().sendError(literal(error == null ? "No material list yet for " + found.get().getName() : error));
+            context.getSource().sendError(literal(error == null ? "No material list yet for " + targetName : error));
             return 0;
         }
         final List<com.steelaspect.cytrasyncmatica.materials.ShoppingList.Line> lines =
                 com.steelaspect.cytrasyncmatica.materials.ShoppingList.build(list, null,
                         com.steelaspect.cytrasyncmatica.service.MaterialTrackingService::stackSizeOf, group);
-        final String title = found.get().getName() + (group == null ? "" : " (" + group + ")");
+        final String title = targetName + (group == null ? "" : " (" + group + ")");
         final String full = com.steelaspect.cytrasyncmatica.materials.ShoppingList.toText(title, lines);
         final ServerCommandSource source = context.getSource();
         if (lines.isEmpty()) {
@@ -203,6 +216,183 @@ public final class SyncmaticaCommand {
         return 1;
     }
 
+    // -- projects ---------------------------------------------------------------------
+
+    private static LiteralArgumentBuilder<ServerCommandSource> projectCommands() {
+        return CommandManager.literal("project")
+                .then(CommandManager.literal("list").executes(SyncmaticaCommand::handleProjectList))
+                .then(CommandManager.literal("info")
+                        .then(CommandManager.argument("project", greedyString())
+                                .suggests(SyncmaticaCommand::suggestProjectNames)
+                                .executes(SyncmaticaCommand::handleProjectInfo)))
+                .then(CommandManager.literal("create")
+                        .requires(SyncmaticaCommand::hasProjectPermission)
+                        .then(CommandManager.argument("name", greedyString())
+                                .executes(SyncmaticaCommand::handleProjectCreate)))
+                .then(CommandManager.literal("delete")
+                        .requires(SyncmaticaCommand::hasProjectPermission)
+                        .then(CommandManager.argument("project", greedyString())
+                                .suggests(SyncmaticaCommand::suggestProjectNames)
+                                .executes(SyncmaticaCommand::handleProjectDelete)))
+                .then(CommandManager.literal("add")
+                        .requires(SyncmaticaCommand::hasProjectPermission)
+                        .then(CommandManager.argument("project", string())
+                                .suggests(SyncmaticaCommand::suggestProjectNames)
+                                .then(CommandManager.argument("schematic", greedyString())
+                                        .suggests(SyncmaticaCommand::suggestPlacementNames)
+                                        .executes(c -> handleProjectMember(c, true)))))
+                .then(CommandManager.literal("remove")
+                        .requires(SyncmaticaCommand::hasProjectPermission)
+                        .then(CommandManager.argument("project", string())
+                                .suggests(SyncmaticaCommand::suggestProjectNames)
+                                .then(CommandManager.argument("schematic", greedyString())
+                                        .suggests(SyncmaticaCommand::suggestPlacementNames)
+                                        .executes(c -> handleProjectMember(c, false)))));
+    }
+
+    private static boolean hasProjectPermission(final ServerCommandSource source) {
+        return Permissions.check(source, com.steelaspect.cytrasyncmatica.projects.ProjectAccess.MANAGE_PERMISSION,
+                com.steelaspect.cytrasyncmatica.projects.ProjectAccess.MANAGE_PERMISSION_LEVEL);
+    }
+
+    private static CompletableFuture<Suggestions> suggestProjectNames(final CommandContext<ServerCommandSource> context, final SuggestionsBuilder builder) {
+        final Context syncmaticaContext = Syncmatica.getContext(Syncmatica.SERVER_CONTEXT);
+        if (syncmaticaContext != null && syncmaticaContext.getProjects() != null) {
+            final String remaining = builder.getRemaining().toLowerCase();
+            for (final com.steelaspect.cytrasyncmatica.projects.Project p : syncmaticaContext.getProjects().all()) {
+                if (p.getName().toLowerCase().startsWith(remaining)) {
+                    builder.suggest(p.getName().contains(" ") ? '"' + p.getName() + '"' : p.getName());
+                }
+            }
+        }
+        return builder.buildFuture();
+    }
+
+    private static com.steelaspect.cytrasyncmatica.service.ProjectService projects(final CommandContext<ServerCommandSource> context) {
+        final Context syncmaticaContext = Syncmatica.getContext(Syncmatica.SERVER_CONTEXT);
+        if (syncmaticaContext == null || syncmaticaContext.getProjects() == null) {
+            context.getSource().sendError(literal("Projects are unavailable"));
+            return null;
+        }
+        return syncmaticaContext.getProjects();
+    }
+
+    private static PlayerIdentifier actor(final CommandContext<ServerCommandSource> context) {
+        final Context syncmaticaContext = Syncmatica.getContext(Syncmatica.SERVER_CONTEXT);
+        final ServerPlayerEntity player = context.getSource().getPlayer();
+        return player == null || syncmaticaContext == null ? null
+                : syncmaticaContext.getPlayerIdentifierProvider().createOrGet(player.getGameProfile());
+    }
+
+    private static int handleProjectList(final CommandContext<ServerCommandSource> context) {
+        final com.steelaspect.cytrasyncmatica.service.ProjectService projects = projects(context);
+        if (projects == null) {
+            return 0;
+        }
+        if (projects.all().isEmpty()) {
+            sendFeedback(context, "No projects yet. Create one with /cytra-syncmatica project create <name>");
+            return 1;
+        }
+        for (final com.steelaspect.cytrasyncmatica.projects.Project p : projects.all()) {
+            final com.steelaspect.cytrasyncmatica.materials.CombinedList.Combined c = projects.combined(p);
+            final String progress = c.list().isEmpty() ? "no materials yet"
+                    : String.format(java.util.Locale.ROOT, "%.1f%% · %d remaining", c.list().percentComplete(), c.list().totalRemaining());
+            sendFeedback(context, p.getName() + " — " + projects.members(p).size() + " schematic(s) · " + progress);
+        }
+        return 1;
+    }
+
+    private static int handleProjectInfo(final CommandContext<ServerCommandSource> context) {
+        final com.steelaspect.cytrasyncmatica.service.ProjectService projects = projects(context);
+        if (projects == null) {
+            return 0;
+        }
+        final String name = context.getArgument("project", String.class);
+        final Optional<com.steelaspect.cytrasyncmatica.projects.Project> found = projects.findByName(name);
+        if (found.isEmpty()) {
+            context.getSource().sendError(literal("Unknown project: " + name));
+            return 0;
+        }
+        final com.steelaspect.cytrasyncmatica.projects.Project p = found.get();
+        final com.steelaspect.cytrasyncmatica.materials.CombinedList.Combined c = projects.combined(p);
+        sendFeedback(context, "Project " + p.getName() + (p.getCreatedBy().isEmpty() ? "" : " (created by " + p.getCreatedBy() + ")"));
+        final Context syncmaticaContext = Syncmatica.getContext(Syncmatica.SERVER_CONTEXT);
+        for (final ServerPlacement m : projects.members(p)) {
+            final com.steelaspect.cytrasyncmatica.materials.MaterialList l = syncmaticaContext.getMaterialTracking() == null ? null
+                    : syncmaticaContext.getMaterialTracking().getList(m);
+            final String progress = l == null ? "no list yet" : String.format(java.util.Locale.ROOT, "%.1f%%", l.percentComplete());
+            sendFeedback(context, "  " + m.getName() + " · " + m.getDimension().replace("minecraft:", "") + " · " + progress);
+        }
+        if (projects.members(p).isEmpty()) {
+            sendFeedback(context, "  (no schematics; add one with /cytra-syncmatica project add \"" + p.getName() + "\" <schematic>)");
+        } else {
+            sendFeedback(context, String.format(java.util.Locale.ROOT, "  combined: %.1f%% · %d of %d items gathered · %d remaining%s",
+                    c.list().percentComplete(), c.list().totalGathered(), c.list().totalRequired(), c.list().totalRemaining(),
+                    c.missingLists() > 0 ? " · " + c.missingLists() + " list(s) still loading" : ""));
+        }
+        return 1;
+    }
+
+    private static int handleProjectCreate(final CommandContext<ServerCommandSource> context) {
+        final com.steelaspect.cytrasyncmatica.service.ProjectService projects = projects(context);
+        if (projects == null) {
+            return 0;
+        }
+        try {
+            final com.steelaspect.cytrasyncmatica.projects.Project p = projects.create(context.getArgument("name", String.class), actor(context));
+            sendFeedback(context, "Created project " + p.getName() + ". Add schematics with /cytra-syncmatica project add \"" + p.getName() + "\" <schematic>");
+            return 1;
+        } catch (final IllegalArgumentException e) {
+            context.getSource().sendError(literal("Cannot create project: " + e.getMessage()));
+            return 0;
+        }
+    }
+
+    private static int handleProjectDelete(final CommandContext<ServerCommandSource> context) {
+        final com.steelaspect.cytrasyncmatica.service.ProjectService projects = projects(context);
+        if (projects == null) {
+            return 0;
+        }
+        final String name = context.getArgument("project", String.class);
+        final Optional<com.steelaspect.cytrasyncmatica.projects.Project> found = projects.findByName(name);
+        if (found.isEmpty()) {
+            context.getSource().sendError(literal("Unknown project: " + name));
+            return 0;
+        }
+        projects.delete(found.get(), actor(context));
+        sendFeedback(context, "Deleted project " + found.get().getName() + " (its schematics stay shared)");
+        return 1;
+    }
+
+    private static int handleProjectMember(final CommandContext<ServerCommandSource> context, final boolean add) {
+        final com.steelaspect.cytrasyncmatica.service.ProjectService projects = projects(context);
+        if (projects == null) {
+            return 0;
+        }
+        final String name = context.getArgument("project", String.class);
+        final Optional<com.steelaspect.cytrasyncmatica.projects.Project> found = projects.findByName(name);
+        if (found.isEmpty()) {
+            context.getSource().sendError(literal("Unknown project: " + name));
+            return 0;
+        }
+        final Context syncmaticaContext = Syncmatica.getContext(Syncmatica.SERVER_CONTEXT);
+        final String schematic = context.getArgument("schematic", String.class);
+        final Optional<ServerPlacement> placement = findPlacementByName(syncmaticaContext, schematic);
+        if (placement.isEmpty()) {
+            context.getSource().sendError(literal("Unknown shared schematic: " + schematic));
+            return 0;
+        }
+        final boolean changed = add ? projects.addMember(found.get(), placement.get(), actor(context))
+                : projects.removeMember(found.get(), placement.get(), actor(context));
+        if (!changed) {
+            context.getSource().sendError(literal(add ? placement.get().getName() + " is already in " + found.get().getName() + " (or the project is full)"
+                    : placement.get().getName() + " is not in " + found.get().getName()));
+            return 0;
+        }
+        sendFeedback(context, (add ? "Added " : "Removed ") + placement.get().getName() + (add ? " to " : " from ") + found.get().getName());
+        return 1;
+    }
+
     private static LiteralArgumentBuilder<ServerCommandSource> whereArgument() {
         return CommandManager.literal("where")
                 .then(CommandManager.argument("schematic", greedyString())
@@ -219,13 +409,24 @@ public final class SyncmaticaCommand {
         }
         final String name = context.getArgument("schematic", String.class);
         final Optional<ServerPlacement> found = findPlacementByName(syncmaticaContext, name);
-        if (found.isEmpty()) {
-            context.getSource().sendError(literal("Unknown shared schematic: " + name));
-            return 0;
-        }
         final ServerCommandSource source = context.getSource();
         final boolean mayseeCoordinates = !syncmaticaContext.getSharingService().isHideCoordinatesWithoutPermission()
                 || Permissions.check(source, com.steelaspect.cytrasyncmatica.service.SharingService.WHERE_PERMISSION, true);
+        if (found.isEmpty()) {
+            final Optional<com.steelaspect.cytrasyncmatica.projects.Project> project = syncmaticaContext.getProjects() == null
+                    ? Optional.empty() : syncmaticaContext.getProjects().findByName(name);
+            if (project.isEmpty()) {
+                context.getSource().sendError(literal("Unknown shared schematic or project: " + name));
+                return 0;
+            }
+            sendFeedback(context, "Project " + project.get().getName() + ":");
+            for (final ServerPlacement m : syncmaticaContext.getProjects().members(project.get())) {
+                for (final net.minecraft.text.Text line : describeLocation(syncmaticaContext, m, source, mayseeCoordinates)) {
+                    source.sendFeedback(() -> line, false);
+                }
+            }
+            return 1;
+        }
         for (final net.minecraft.text.Text line : describeLocation(syncmaticaContext, found.get(), source, mayseeCoordinates)) {
             source.sendFeedback(() -> line, false);
         }
@@ -644,19 +845,11 @@ public final class SyncmaticaCommand {
         }
     }
 
-    private static RequiredArgumentBuilder<ServerCommandSource, String> projectArgument() {
-        return CommandManager.argument("project_name", string())
-                .suggests((context, builder) -> {
-                    final Context syncmaticaContext = Syncmatica.getContext(Syncmatica.SERVER_CONTEXT);
-                    if (syncmaticaContext != null) {
-                        syncmaticaContext.getSyncmaticManager().getAll().stream()
-                                .map(ServerPlacement::getName)
-                                .forEach(builder::suggest);
-                    }
-                    return builder.buildFuture();
-                })
-                .then(CommandManager.literal("rescanBuild")
-                        .requires(SyncmaticaCommand::hasCommandPermission)
+    private static LiteralArgumentBuilder<ServerCommandSource> rescanArgument() {
+        return CommandManager.literal("rescan")
+                .requires(SyncmaticaCommand::hasCommandPermission)
+                .then(CommandManager.argument("schematic", greedyString())
+                        .suggests(SyncmaticaCommand::suggestPlacementNames)
                         .executes(SyncmaticaCommand::handleRescanBuild));
     }
 
@@ -672,12 +865,10 @@ public final class SyncmaticaCommand {
             context.getSource().sendError(literal("Cytra-Syncmatica build service unavailable"));
             return 0;
         }
-        final String projectName = context.getArgument("project_name", String.class);
-        final Optional<ServerPlacement> placement = syncmaticaContext.getSyncmaticManager().getAll().stream()
-                .filter(candidate -> candidate.getName().equals(projectName))
-                .findFirst();
+        final String projectName = context.getArgument("schematic", String.class);
+        final Optional<ServerPlacement> placement = findPlacementByName(syncmaticaContext, projectName);
         if (!placement.isPresent()) {
-            context.getSource().sendError(literal("Unknown Cytra-Syncmatica project: " + projectName));
+            context.getSource().sendError(literal("Unknown shared schematic: " + projectName));
             return 0;
         }
         if (!syncmaticaContext.getBuildService().rescan(placement.get())) {

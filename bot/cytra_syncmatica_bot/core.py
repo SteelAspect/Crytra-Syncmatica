@@ -21,6 +21,7 @@ log = logging.getLogger("bot")
 COGS = [
     "cytra_syncmatica_bot.cogs.linking",
     "cytra_syncmatica_bot.cogs.schematics",
+    "cytra_syncmatica_bot.cogs.projects",
     "cytra_syncmatica_bot.cogs.feed",
 ]
 META_SYNC_HASH = "command_sync_hash"

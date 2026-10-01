@@ -15,8 +15,10 @@ What it does:
 - `/schematic groups <name>`: progress per material group
 - `/schematic shopping <name> [group] [as_file]`: what is still missing as shulkers + stacks + items, grouped; long lists (or `as_file`) come as a text file
 - `/materials <schematic> <item> <amount>`: quick add without the buttons
+- `/project list|info|materials|shopping|where <name>`: projects (several schematics tracked as one combined list; the materials view shows the per-schematic split and edits fill the first schematic with something left first)
+- `/project create|delete|add|remove`: manage projects as your linked player (the server checks `cytra-syncmatica.project.manage`, op level 2 by default)
 - `/link <code>`, `/unlink`, `/whoami`, `/links`: account linking. In game, run `/cytra-syncmatica link` to get a one-time code.
-- A feed channel: shared schematics, item/group/schematic completions, and **one "materials" message per schematic that is edited in place** as the team gathers (also after a reconnect, via the mod's `resync`). Message ids are stored in SQLite so restarts keep editing the same messages.
+- A feed channel: shared schematics, project changes, item/group/schematic/project completions, and **one "materials" message per schematic that is edited in place** as the team gathers (also after a reconnect, via the mod's `resync`). Message ids are stored in SQLite so restarts keep editing the same messages.
 - A clear "Cytra-Syncmatica isn't installed on that server" message when the server has only Cytra Link (or an old one).
 
 ## Requirements
@@ -76,7 +78,7 @@ WantedBy=multi-user.target
 | `server.timeout` | `8.0` | seconds to wait for a reply |
 | `syncmatica.page_size` | `15` | items per page (max 25) |
 | `syncmatica.feed_edit` | `true` | edit one materials message per schematic in place |
-| `syncmatica.announce_item_completed` / `announce_group_completed` / `announce_schematic_completed` / `announce_schematic_shared` | `true` | feed posts |
+| `syncmatica.announce_item_completed` / `announce_group_completed` / `announce_schematic_completed` / `announce_project_completed` / `announce_project_changes` / `announce_schematic_shared` | `true` | feed posts |
 | `linking.enabled` | `true` | register `/link`, `/unlink`, `/whoami`, `/links` |
 | `linking.shared_db_path` | `""` | read-only fallback to a cytra-bridge database |
 | `database` | `syncmatica-bot.sqlite3` | this bot's SQLite file |

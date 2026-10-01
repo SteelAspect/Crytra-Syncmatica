@@ -2,12 +2,15 @@ package com.steelaspect.cytrasyncmatica.bridge;
 
 import com.google.gson.JsonArray;
 import com.google.gson.JsonObject;
+import com.steelaspect.cytrasyncmatica.Context;
 import com.steelaspect.cytrasyncmatica.ServerPlacement;
 import com.steelaspect.cytrasyncmatica.extended_core.PlayerIdentifier;
 import com.steelaspect.cytrasyncmatica.materials.MaterialEntry;
 import com.steelaspect.cytrasyncmatica.materials.MaterialList;
 import com.steelaspect.cytrasyncmatica.materials.MaterialListExtractor;
+import com.steelaspect.cytrasyncmatica.materials.CombinedList;
 import com.steelaspect.cytrasyncmatica.materials.StackFormat;
+import com.steelaspect.cytrasyncmatica.projects.Project;
 import com.steelaspect.cytrasyncmatica.service.MaterialTrackingService;
 import net.minecraft.util.math.BlockPos;
 
@@ -120,6 +123,53 @@ public final class BridgeJson {
             o.add("editor", null);
         }
         o.addProperty("edited_at", e.getEditedAt());
+        return o;
+    }
+
+    /** A project: its members (with their own summaries) and the combined summary. */
+    public static JsonObject project(final Project project, final Context context, final boolean hideCoordinates) {
+        final JsonObject o = new JsonObject();
+        o.addProperty("id", project.getId().toString());
+        o.addProperty("name", project.getName());
+        o.addProperty("created_by", project.getCreatedBy());
+        o.addProperty("created_at", project.getCreatedAt());
+        final JsonArray members = new JsonArray();
+        final MaterialTrackingService materials = context.getMaterialTracking();
+        for (final ServerPlacement p : context.getProjects().members(project)) {
+            final JsonObject m = new JsonObject();
+            m.addProperty("id", p.getId().toString());
+            m.addProperty("name", p.getName());
+            m.addProperty("dimension", p.getDimension());
+            if (!hideCoordinates) {
+                m.add("origin", position(p.getPosition()));
+            }
+            m.add("materials", summary(materials == null ? null : materials.getList(p)));
+            members.add(m);
+        }
+        o.add("members", members);
+        final CombinedList.Combined c = context.getProjects().combined(project);
+        final JsonObject combined = summary(c.list());
+        combined.addProperty("lists_missing", c.missingLists());
+        o.add("materials", combined);
+        return o;
+    }
+
+    /** get_materials item with the per-schematic breakdown of a project. */
+    public static JsonObject entryWithParts(final MaterialEntry e, final java.util.List<CombinedList.Part> parts) {
+        final JsonObject o = entry(e);
+        final JsonArray arr = new JsonArray();
+        if (parts != null) {
+            for (final CombinedList.Part p : parts) {
+                final JsonObject part = new JsonObject();
+                part.addProperty("schematic_id", p.key());
+                part.addProperty("schematic", p.label());
+                part.addProperty("required", p.required());
+                part.addProperty("gathered", p.gathered());
+                part.addProperty("remaining", p.remaining());
+                arr.add(part);
+            }
+        }
+        o.add("parts", arr);
         return o;
     }
 

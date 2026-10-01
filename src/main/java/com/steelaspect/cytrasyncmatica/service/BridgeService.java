@@ -35,7 +35,7 @@ import java.util.UUID;
  * <p>All methods run on the server thread except {@link #onBotConnected()} and
  * {@link #flushIfDue()} callers, which hand over to it.
  */
-public class BridgeService extends AbstractService implements MaterialEventListener {
+public class BridgeService extends AbstractService implements MaterialEventListener, ProjectService.Listener {
     private static final Logger LOGGER = LogManager.getLogger(BridgeService.class);
     public static final int PROTOCOL_VERSION = 1;
     public static final boolean ENABLED_DEFAULT = true;
@@ -125,12 +125,18 @@ public class BridgeService extends AbstractService implements MaterialEventListe
         if (context.getMaterialTracking() != null) {
             context.getMaterialTracking().addListener(this);
         }
+        if (context.getProjects() != null) {
+            context.getProjects().addListener(this);
+        }
     }
 
     @Override
     public void shutdown() {
         if (context != null && context.getMaterialTracking() != null) {
             context.getMaterialTracking().removeListener(this);
+        }
+        if (context != null && context.getProjects() != null) {
+            context.getProjects().removeListener(this);
         }
         queue.clear();
         batches.clear();
@@ -192,6 +198,7 @@ public class BridgeService extends AbstractService implements MaterialEventListe
         final JsonObject resync = new JsonObject();
         resync.addProperty("queued_events_sent", sent);
         resync.addProperty("schematics", context.getSyncmaticManager().getAll().size());
+        resync.addProperty("projects", context.getProjects() == null ? 0 : context.getProjects().all().size());
         s.publish("resync", resync);
     }
 
@@ -269,6 +276,30 @@ public class BridgeService extends AbstractService implements MaterialEventListe
         o.add("group", group.toJson());
         o.add("editor", BridgeJson.player(editor));
         publish("group_completed", o);
+    }
+
+    // -- project events (ProjectService.Listener, server thread) ------------------------
+
+    public JsonObject projectPayload(final com.steelaspect.cytrasyncmatica.projects.Project project) {
+        final JsonObject o = new JsonObject();
+        o.add("project", BridgeJson.project(project, context, hideCoordinates));
+        return o;
+    }
+
+    @Override
+    public void onProjectChanged(final com.steelaspect.cytrasyncmatica.projects.Project project, final String action, final PlayerIdentifier by) {
+        final JsonObject o = projectPayload(project);
+        o.addProperty("action", action);
+        o.add("by", BridgeJson.player(by));
+        publish("project_changed", o);
+    }
+
+    @Override
+    public void onProjectCompleted(final com.steelaspect.cytrasyncmatica.projects.Project project, final PlayerIdentifier editor) {
+        flushBatches(true);
+        final JsonObject o = projectPayload(project);
+        o.add("editor", BridgeJson.player(editor));
+        publish("project_completed", o);
     }
 
     public void onSchematicCompleted(final ServerPlacement placement, final MaterialList list, final PlayerIdentifier editor) {

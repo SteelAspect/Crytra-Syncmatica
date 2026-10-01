@@ -17,6 +17,9 @@ import com.steelaspect.cytrasyncmatica.materials.MaterialEntry;
 import com.steelaspect.cytrasyncmatica.materials.MaterialList;
 import com.steelaspect.cytrasyncmatica.materials.MaterialOp;
 import com.steelaspect.cytrasyncmatica.materials.MaterialWire;
+import com.steelaspect.cytrasyncmatica.projects.Project;
+import com.steelaspect.cytrasyncmatica.projects.ProjectAccess;
+import com.steelaspect.cytrasyncmatica.service.ProjectService;
 import com.steelaspect.cytrasyncmatica.util.SyncmaticaUtil;
 import com.mojang.authlib.GameProfile;
 import io.netty.buffer.Unpooled;
@@ -228,6 +231,9 @@ public class ServerCommunicationManager extends CommunicationManager {
                 if (context.getBridge() != null) {
                     context.getBridge().onSchematicRemoved(placement);
                 }
+                if (context.getProjects() != null) {
+                    context.getProjects().onPlacementRemoved(placement.getId());
+                }
                 for (final ExchangeTarget client : broadcastTargets) {
                     final PacketByteBuf newPacketBuf = new PacketByteBuf(Unpooled.buffer());
                     newPacketBuf.writeUuid(placement.getId());
@@ -255,14 +261,102 @@ public class ServerCommunicationManager extends CommunicationManager {
             return;
         }
         if (type == PacketType.MATERIAL_REQUEST) {
-            final ServerPlacement placement = context.getSyncmaticManager().getPlacement(packetBuf.readUuid());
+            final UUID requestedId = packetBuf.readUuid();
+            final ServerPlacement placement = context.getSyncmaticManager().getPlacement(requestedId);
             if (placement != null && supportsMaterialTracking(source)) {
                 sendMaterialList(placement, source);
+            } else if (supportsMaterialTracking(source) && context.getProjects() != null) {
+                final Project project = context.getProjects().get(requestedId);
+                if (project != null) {
+                    for (final ServerPlacement member : context.getProjects().members(project)) {
+                        sendMaterialList(member, source);
+                    }
+                }
             }
             return;
         }
         if (type == PacketType.MATERIAL_EDIT) {
             handleMaterialEdit(source, packetBuf);
+            return;
+        }
+        if (type == PacketType.PROJECT_REQUEST) {
+            if (supportsMaterialTracking(source)) {
+                sendProjects(source);
+            }
+            return;
+        }
+        if (type == PacketType.PROJECT_MANAGE) {
+            handleProjectManage(source, packetBuf);
+        }
+    }
+
+    // -- projects ------------------------------------------------------------------
+
+    public void sendProjects(final ExchangeTarget target) {
+        final ProjectService projects = context.getProjects();
+        if (projects == null) {
+            return;
+        }
+        final PacketByteBuf buf = new PacketByteBuf(Unpooled.buffer());
+        final List<Project> all = projects.all();
+        buf.writeVarInt(all.size());
+        for (final Project p : all) {
+            p.write(buf);
+        }
+        target.sendPacket(PacketType.PROJECT_LIST.toIdentifier(target.getProtocolFlavor()), buf, context);
+    }
+
+    public void broadcastProjects() {
+        purgeStaleTargets();
+        for (final ExchangeTarget client : new ArrayList<>(broadcastTargets)) {
+            if (supportsMaterialTracking(client)) {
+                sendProjects(client);
+            }
+        }
+    }
+
+    /** Wire: byte action (0 create, 1 delete, 2 add member, 3 remove member), string name, uuid project, uuid placement. */
+    private void handleProjectManage(final ExchangeTarget source, final PacketByteBuf packetBuf) {
+        final int action = packetBuf.readByte();
+        final String name = packetBuf.readString(Project.MAX_NAME_LENGTH);
+        final UUID projectId = packetBuf.readUuid();
+        final UUID placementId = packetBuf.readUuid();
+        final ProjectService projects = context.getProjects();
+        final ServerPlayerEntity player = playerMap.get(source);
+        if (projects == null || player == null) {
+            return;
+        }
+        if (!Permissions.check(player, ProjectAccess.MANAGE_PERMISSION, ProjectAccess.MANAGE_PERMISSION_LEVEL)) {
+            sendMessage(source, MessageType.ERROR, "cytra-syncmatica.error.permission_denied");
+            return;
+        }
+        final PlayerIdentifier by = context.getPlayerIdentifierProvider().createOrGet(player.getGameProfile());
+        try {
+            if (action == 0) {
+                projects.create(name, by);
+                return;
+            }
+            final Project project = projects.get(projectId);
+            if (project == null) {
+                sendMessage(source, MessageType.ERROR, "cytra-syncmatica.error.project.unknown");
+                return;
+            }
+            if (action == 1) {
+                projects.delete(project, by);
+            } else {
+                final ServerPlacement placement = context.getSyncmaticManager().getPlacement(placementId);
+                if (placement == null) {
+                    sendMessage(source, MessageType.ERROR, "cytra-syncmatica.error.materials.unknown_item", placementId.toString());
+                    return;
+                }
+                if (action == 2) {
+                    projects.addMember(project, placement, by);
+                } else if (action == 3) {
+                    projects.removeMember(project, placement, by);
+                }
+            }
+        } catch (final IllegalArgumentException e) {
+            sendMessage(source, MessageType.ERROR, "cytra-syncmatica.error.project.rejected", e.getMessage());
         }
     }
 
@@ -322,7 +416,8 @@ public class ServerCommunicationManager extends CommunicationManager {
             return;
         }
         final ServerPlacement placement = context.getSyncmaticManager().getPlacement(placementId);
-        if (placement == null) {
+        final Project project = placement == null && context.getProjects() != null ? context.getProjects().get(placementId) : null;
+        if (placement == null && project == null) {
             return;
         }
         if (!canEditMaterials(player, op)) {
@@ -330,6 +425,13 @@ public class ServerCommunicationManager extends CommunicationManager {
             return;
         }
         final PlayerIdentifier editor = context.getPlayerIdentifierProvider().createOrGet(player.getGameProfile());
+        if (project != null) {
+            final ProjectService.Outcome po = context.getProjects().apply(project, itemId, op, amount, editor);
+            if (po == ProjectService.Outcome.UNKNOWN_ITEM || po == ProjectService.Outcome.NO_LIST) {
+                sendMessage(source, MessageType.ERROR, "cytra-syncmatica.error.materials.unknown_item", itemId);
+            }
+            return;
+        }
         final MaterialTrackingService.Outcome outcome = materials.apply(placement, itemId, op, amount, editor);
         if (outcome == MaterialTrackingService.Outcome.UNKNOWN_ITEM || outcome == MaterialTrackingService.Outcome.NO_LIST) {
             sendMessage(source, MessageType.ERROR, "cytra-syncmatica.error.materials.unknown_item", itemId);

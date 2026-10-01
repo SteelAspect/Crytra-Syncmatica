@@ -121,6 +121,62 @@ async def test_shopping_command_groups_lines_and_attaches_a_file_when_asked():
         await shutdown(bot, server)
 
 
+async def test_project_commands_manage_and_show_projects():
+    from cytra_syncmatica_bot.cogs.projects import Projects
+    bot, server, ext = await make_bot()
+    try:
+        await bot.db.set_link(42, OP_UUID, "OpPlayer")
+        await bot.db.set_link(43, "66666666-7777-8888-9999-aaaaaaaaaaaa", "PlainPlayer")
+        cog = Projects(bot)
+        it = FakeInteraction(make_member(1), bot)
+        await cog.list_.callback(cog, it)
+        assert "No projects yet" in it.followup.sent[-1]["content"]
+
+        it = FakeInteraction(make_member(42), bot)
+        it.extras["player"] = (OP_UUID, "OpPlayer")
+        await cog.create.callback(cog, it, "Base")
+        assert "created as **OpPlayer**" in it.followup.sent[-1]["content"]
+        assert ext.project_actions[-1]["mc_uuid"] == OP_UUID
+        it = FakeInteraction(make_member(42), bot)
+        it.extras["player"] = (OP_UUID, "OpPlayer")
+        await cog.add.callback(cog, it, "Base", "Iron farm")
+        assert list(ext.projects.values())[0]["members"] == [SCHEMATIC_ID]
+
+        it = FakeInteraction(make_member(1), bot)
+        await cog.info.callback(cog, it, "base")
+        embed = it.followup.sent[-1]["embed"]
+        assert embed.title == "Project: Base"
+        fields = {f.name: f.value for f in embed.fields}
+        assert "Iron farm" in fields["Schematics (1)"] and "Combined materials" in fields
+
+        # the combined materials view targets the project and every edit carries project_id
+        view = MaterialsView(bot, "p1", "Base", False, target_key="project_id")
+        await view.fetch()
+        assert view.schematic_name == "Base" and view.items[0]["parts"][0]["schematic"] == "Iron farm"
+        view.selected = "minecraft:stone"
+        it = FakeInteraction(make_member(42), bot)
+        await view.act(it, "add", amount=10)
+        assert ext.actions[-1]["project_id"] == "p1" and ext.items["minecraft:stone"][1] == 10
+
+        it = FakeInteraction(make_member(1), bot)
+        await cog.shopping.callback(cog, it, "Base")
+        assert it.followup.sent[-1]["embed"].title == "Shopping list: Base"
+        it = FakeInteraction(make_member(1), bot)
+        await cog.where.callback(cog, it, "Base")
+        assert it.followup.sent[-1]["embed"].fields[0].name == "Iron farm"
+
+        # a plain player may not manage projects: the mod's refusal is shown privately by the error handler path
+        it = FakeInteraction(make_member(43), bot)
+        it.extras["player"] = ("66666666-7777-8888-9999-aaaaaaaaaaaa", "PlainPlayer")
+        try:
+            await cog.delete.callback(cog, it, "Base")
+        except Exception as exc:  # the cog lets LinkError propagate to the app-command error handler
+            assert "not permitted" in str(exc)
+        assert ext.projects, "still there"
+    finally:
+        await shutdown(bot, server)
+
+
 async def test_groups_command_lists_progress_per_group():
     bot, server, ext = await make_bot()
     try:
@@ -186,6 +242,10 @@ async def test_feed_edits_one_message_per_schematic_and_refreshes_on_resync():
         assert again.message_id != first.message_id
         await feed.on_link_event("schematic_removed", {"id": SCHEMATIC_ID, "name": "Iron farm"}, 6)
         assert await bot.db.get_feed_message(SCHEMATIC_ID) is None
+        await feed.on_link_event("project_changed", {"action": "created", "project": {"id": "p1", "name": "Base", "members": []}, "by": {"name": "OpPlayer"}}, 7)
+        assert "Project **Base** created" in channel.sent[-1]["content"]
+        await feed.on_link_event("project_completed", {"project": {"id": "p1", "name": "Base", "members": [1]}, "editor": {"name": "OpPlayer"}}, 8)
+        assert "project **Base**" in channel.sent[-1]["content"]
     finally:
         await shutdown(bot, server)
 

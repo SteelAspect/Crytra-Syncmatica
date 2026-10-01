@@ -1,6 +1,7 @@
 package com.steelaspect.cytrasyncmatica.client.materials;
 
 import com.steelaspect.cytrasyncmatica.ServerPlacement;
+import com.steelaspect.cytrasyncmatica.projects.Project;
 import fi.dy.masa.litematica.schematic.placement.SchematicPlacement;
 
 import java.util.Locale;
@@ -16,12 +17,31 @@ public final class TrackedSchematic {
     private final String name;
     private final ServerPlacement server;
     private final SchematicPlacement local;
+    private final Project project;
 
     private TrackedSchematic(final String key, final String name, final ServerPlacement server, final SchematicPlacement local) {
+        this(key, name, server, local, null);
+    }
+
+    private TrackedSchematic(final String key, final String name, final ServerPlacement server, final SchematicPlacement local, final Project project) {
         this.key = key;
         this.name = name;
         this.server = server;
         this.local = local;
+        this.project = project;
+    }
+
+    /** A project: its combined list is shown, edits are split over its members. */
+    public static TrackedSchematic project(final Project project) {
+        return new TrackedSchematic("project-" + project.getId(), project.getName(), null, null, project);
+    }
+
+    public boolean isProject() {
+        return project != null;
+    }
+
+    public Project project() {
+        return project;
     }
 
     public static TrackedSchematic shared(final ServerPlacement placement) {

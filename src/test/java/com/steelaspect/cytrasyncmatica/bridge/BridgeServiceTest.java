@@ -167,6 +167,33 @@ final class BridgeServiceTest {
         }
     }
 
+    @Test
+    void projectEventsCarryTheProjectAndItsMembers() {
+        final FakeSink sink = new FakeSink();
+        sink.connected = true;
+        BridgeSinkRegistry.register(sink);
+        final Context context = newServerContext();
+        try {
+            context.startup();
+            final PlayerIdentifier alex = context.getPlayerIdentifierProvider().createOrGet(UUID.randomUUID(), "Alex");
+            final ServerPlacement p = placement();
+            context.getSyncmaticManager().addPlacement(p);
+            final com.steelaspect.cytrasyncmatica.projects.Project project = context.getProjects().create("Base", alex);
+            context.getProjects().addMember(project, p, alex);
+            assertEquals(List.of("project_changed", "project_changed"), sink.types);
+            final JsonObject added = sink.payloads.get(1);
+            assertEquals("member_added", added.get("action").getAsString());
+            assertEquals("Base", added.getAsJsonObject("project").get("name").getAsString());
+            assertEquals(1, added.getAsJsonObject("project").getAsJsonArray("members").size());
+            assertEquals("Alex", added.getAsJsonObject("by").get("name").getAsString());
+            context.getBridge().onProjectCompleted(project, alex);
+            assertEquals("project_completed", sink.types.get(2));
+            assertEquals("Alex", sink.payloads.get(2).getAsJsonObject("editor").get("name").getAsString());
+        } finally {
+            context.shutdown();
+        }
+    }
+
     private static ServerPlacement placement() {
         final ServerPlacement p = new ServerPlacement(UUID.randomUUID(), "farm", UUID.randomUUID(), PlayerIdentifier.MISSING_PLAYER);
         p.move("minecraft:overworld", new BlockPos(10, 64, -20), BlockRotation.NONE, BlockMirror.NONE);

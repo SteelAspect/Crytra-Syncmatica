@@ -101,6 +101,25 @@ class Feed(commands.Cog):
             return
         await self._send(content=f"🎉 All materials for **{s.get('name', '?')}** are gathered · {ui.player_text(payload.get('editor'))}")
 
+    async def ev_project_changed(self, payload: dict) -> None:
+        if not self.cfg.syncmatica.announce_project_changes:
+            return
+        p = payload.get("project") or {}
+        action = payload.get("action", "")
+        who = ui.player_text(payload.get("by"))
+        if action == "created":
+            await self._send(content=f"📁 Project **{p.get('name', '?')}** created · {who}")
+        elif action == "deleted":
+            await self._send(content=f"📁 Project **{p.get('name', '?')}** deleted · {who}")
+        elif action in ("member_added", "member_removed"):
+            await self._send(content=f"📁 Project **{p.get('name', '?')}** now has {len(p.get('members') or [])} schematic(s) · {who}")
+
+    async def ev_project_completed(self, payload: dict) -> None:
+        if not self.cfg.syncmatica.announce_project_completed:
+            return
+        p = payload.get("project") or {}
+        await self._send(content=f"🏁 Every material for project **{p.get('name', '?')}** is gathered · {ui.player_text(payload.get('editor'))}")
+
     async def ev_resync(self, payload: dict) -> None:
         for fm in await self.bot.db.all_feed_messages():
             await self.refresh_materials_message(fm.schematic_id)

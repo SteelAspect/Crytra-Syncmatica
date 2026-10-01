@@ -124,6 +124,12 @@ public final class CytraLinkBridge implements LinkExtension, BridgeSink {
                 return done(getMaterials(context, payload));
             case "get_groups":
                 return done(getGroups(context, payload));
+            case "list_projects":
+                return done(listProjects(context));
+            case "get_project":
+                return done(getProject(context, payload));
+            case "project_action":
+                return projectAction(context, payload);
             case "get_shopping_list":
                 return done(getShoppingList(context, payload));
             case "get_where":
@@ -152,7 +158,7 @@ public final class CytraLinkBridge implements LinkExtension, BridgeSink {
         o.addProperty("coordinates_hidden", context.getBridge().isHideCoordinates());
         o.addProperty("queued_events", context.getBridge().queuedEvents());
         final JsonArray ops = new JsonArray();
-        for (final String s : new String[] {"ping", "list_schematics", "get_schematic", "get_materials", "get_groups", "get_shopping_list", "get_where", "material_action", "link_claim"}) {
+        for (final String s : new String[] {"ping", "list_schematics", "get_schematic", "get_materials", "get_groups", "get_shopping_list", "get_where", "material_action", "list_projects", "get_project", "project_action", "link_claim"}) {
             ops.add(s);
         }
         o.add("ops", ops);
@@ -188,13 +194,8 @@ public final class CytraLinkBridge implements LinkExtension, BridgeSink {
     }
 
     private JsonObject getMaterials(final Context context, final JsonObject payload) {
-        final ServerPlacement p = requirePlacement(context, payload);
-        final MaterialTrackingService materials = context.getMaterialTracking();
-        final MaterialList list = materials == null ? null : materials.getList(p);
-        if (list == null) {
-            final String error = materials == null ? "material tracking is disabled" : materials.getExtractionError(p.getId());
-            throw new IllegalStateException(error == null ? "no material list yet for " + p.getName() : error);
-        }
+        final Target t = requireTarget(context, payload);
+        final MaterialList list = requireList(context, t);
         final boolean missingOnly = bool(payload, "missing_only", false);
         final int offset = Math.max(0, integer(payload, "offset", 0));
         final int limit = Math.max(1, Math.min(MAX_PAGE, integer(payload, "limit", DEFAULT_PAGE)));
@@ -210,13 +211,14 @@ public final class CytraLinkBridge implements LinkExtension, BridgeSink {
         if (!group.isBlank()) {
             entries.removeIf(e -> !e.getGroup().equalsIgnoreCase(group.trim()));
         }
+        final java.util.Map<String, List<com.steelaspect.cytrasyncmatica.materials.CombinedList.Part>> breakdown =
+                t.isProject() ? context.getProjects().combined(t.project()).breakdown() : null;
         final JsonArray items = new JsonArray();
         for (int i = offset; i < entries.size() && items.size() < limit; i++) {
-            items.add(BridgeJson.entry(entries.get(i)));
+            final MaterialEntry e = entries.get(i);
+            items.add(breakdown == null ? BridgeJson.entry(e) : BridgeJson.entryWithParts(e, breakdown.get(e.getItemId())));
         }
-        final JsonObject o = new JsonObject();
-        o.addProperty("schematic_id", p.getId().toString());
-        o.addProperty("schematic", p.getName());
+        final JsonObject o = t.header();
         o.add("summary", BridgeJson.summary(list));
         o.addProperty("total", entries.size());
         o.addProperty("offset", offset);
@@ -229,26 +231,25 @@ public final class CytraLinkBridge implements LinkExtension, BridgeSink {
     }
 
     private JsonObject getGroups(final Context context, final JsonObject payload) {
-        final ServerPlacement p = requirePlacement(context, payload);
-        final MaterialList list = requireList(context, p);
-        final JsonObject o = new JsonObject();
-        o.addProperty("schematic_id", p.getId().toString());
-        o.addProperty("schematic", p.getName());
+        final Target t = requireTarget(context, payload);
+        final MaterialList list = requireList(context, t);
+        final JsonObject o = t.header();
         o.add("summary", BridgeJson.summary(list));
         o.add("groups", BridgeJson.groups(list));
         return o;
     }
 
     private JsonObject getShoppingList(final Context context, final JsonObject payload) {
-        final ServerPlacement p = requirePlacement(context, payload);
-        final MaterialList list = requireList(context, p);
+        final Target t = requireTarget(context, payload);
+        final MaterialList list = requireList(context, t);
         final String group = str(payload, "group", "");
         final List<com.steelaspect.cytrasyncmatica.materials.ShoppingList.Line> lines =
                 com.steelaspect.cytrasyncmatica.materials.ShoppingList.build(list, null, MaterialTrackingService::stackSizeOf, group);
-        final String title = p.getName() + (group.isBlank() ? "" : " (" + group.trim() + ")");
+        final String title = t.name() + (group.isBlank() ? "" : " (" + group.trim() + ")");
         final JsonObject o = com.steelaspect.cytrasyncmatica.materials.ShoppingList.toJson(title, lines);
-        o.addProperty("schematic_id", p.getId().toString());
-        o.addProperty("schematic", p.getName());
+        for (final java.util.Map.Entry<String, JsonElement> h : t.header().entrySet()) {
+            o.add(h.getKey(), h.getValue());
+        }
         if (!group.isBlank()) {
             o.addProperty("group", group.trim());
         }
@@ -256,24 +257,48 @@ public final class CytraLinkBridge implements LinkExtension, BridgeSink {
         return o;
     }
 
-    private static MaterialList requireList(final Context context, final ServerPlacement p) {
+    private static MaterialList requireList(final Context context, final Target t) {
         final MaterialTrackingService materials = context.getMaterialTracking();
-        final MaterialList list = materials == null ? null : materials.getList(p);
+        if (materials == null) {
+            throw new IllegalStateException("material tracking is disabled");
+        }
+        if (t.isProject()) {
+            final com.steelaspect.cytrasyncmatica.materials.CombinedList.Combined c = context.getProjects().combined(t.project());
+            if (c.list().isEmpty() && c.missingLists() > 0) {
+                throw new IllegalStateException("no material list yet for project " + t.name());
+            }
+            return c.list();
+        }
+        final MaterialList list = materials.getList(t.placement());
         if (list == null) {
-            final String error = materials == null ? "material tracking is disabled" : materials.getExtractionError(p.getId());
-            throw new IllegalStateException(error == null ? "no material list yet for " + p.getName() : error);
+            final String error = materials.getExtractionError(t.placement().getId());
+            throw new IllegalStateException(error == null ? "no material list yet for " + t.name() : error);
         }
         return list;
     }
 
     private JsonObject getWhere(final Context context, final JsonObject payload) {
-        final ServerPlacement p = requirePlacement(context, payload);
+        final Target t = requireTarget(context, payload);
+        final boolean hide = context.getBridge().isHideCoordinates();
+        if (t.isProject()) {
+            final JsonObject o = t.header();
+            o.addProperty("coordinates_hidden", hide);
+            final JsonArray arr = new JsonArray();
+            for (final ServerPlacement m : context.getProjects().members(t.project())) {
+                arr.add(whereOf(context, m, hide));
+            }
+            o.add("schematics", arr);
+            return o;
+        }
+        return whereOf(context, t.placement(), hide);
+    }
+
+    private static JsonObject whereOf(final Context context, final ServerPlacement p, final boolean hide) {
         final MaterialTrackingService materials = context.getMaterialTracking();
         final JsonObject o = new JsonObject();
         o.addProperty("schematic_id", p.getId().toString());
         o.addProperty("schematic", p.getName());
         o.addProperty("dimension", p.getDimension());
-        final boolean hide = context.getBridge().isHideCoordinates();
         o.addProperty("coordinates_hidden", hide);
         if (!hide) {
             final JsonObject s = BridgeJson.schematic(p, null, materials == null ? null : materials.getStats(p.getId()), false);
@@ -285,7 +310,7 @@ public final class CytraLinkBridge implements LinkExtension, BridgeSink {
     }
 
     private CompletableFuture<JsonObject> materialAction(final Context context, final JsonObject payload) {
-        final ServerPlacement p = requirePlacement(context, payload);
+        final Target t = requireTarget(context, payload);
         final String item = str(payload, "item", null);
         final MaterialOp op = MaterialOp.fromWireName(str(payload, "action", null));
         final int amount = integer(payload, "amount", 1);
@@ -322,27 +347,165 @@ public final class CytraLinkBridge implements LinkExtension, BridgeSink {
                             + " (needs " + MaterialAccess.requiredNode(op) + ")");
                 }
                 final PlayerIdentifier editor = context.getPlayerIdentifierProvider().createOrGet(profile.id(), profile.name());
-                final MaterialTrackingService.Outcome outcome = materials.apply(p, item, op, amount, editor);
+                final String outcome;
+                if (t.isProject()) {
+                    outcome = context.getProjects().apply(t.project(), item, op, amount, editor).name();
+                } else {
+                    outcome = materials.apply(t.placement(), item, op, amount, editor).name();
+                }
                 switch (outcome) {
-                    case UNKNOWN_ITEM -> throw new IllegalArgumentException("unknown item " + item + " in " + p.getName());
-                    case NO_LIST -> throw new IllegalStateException("no material list yet for " + p.getName());
-                    case DISABLED -> throw new IllegalStateException("material tracking is disabled");
+                    case "UNKNOWN_ITEM" -> throw new IllegalArgumentException("unknown item " + item + " in " + t.name());
+                    case "NO_LIST" -> throw new IllegalStateException("no material list yet for " + t.name());
+                    case "DISABLED" -> throw new IllegalStateException("material tracking is disabled");
                     default -> {
                     }
                 }
-                final MaterialList list = materials.getList(p);
-                final JsonObject o = new JsonObject();
-                o.addProperty("schematic_id", p.getId().toString());
-                o.addProperty("schematic", p.getName());
-                o.addProperty("changed", outcome == MaterialTrackingService.Outcome.OK);
-                o.add("item", BridgeJson.entry(list.get(item)));
+                final MaterialList list = requireList(context, t);
+                final JsonObject o = t.header();
+                o.addProperty("changed", "OK".equals(outcome));
+                o.add("item", t.isProject()
+                        ? BridgeJson.entryWithParts(list.get(item), context.getProjects().combined(t.project()).breakdown().get(item))
+                        : BridgeJson.entry(list.get(item)));
                 o.add("summary", BridgeJson.summary(list));
                 out.complete(o);
-            } catch (final Throwable t) {
-                out.completeExceptionally(t);
+            } catch (final Throwable failure) {
+                out.completeExceptionally(failure);
             }
         }));
         return out;
+    }
+
+    // -- projects ----------------------------------------------------------------
+
+    private JsonObject listProjects(final Context context) {
+        final JsonArray arr = new JsonArray();
+        final boolean hide = context.getBridge().isHideCoordinates();
+        for (final com.steelaspect.cytrasyncmatica.projects.Project p : context.getProjects().all()) {
+            arr.add(BridgeJson.project(p, context, hide));
+        }
+        final JsonObject o = new JsonObject();
+        o.add("projects", arr);
+        return o;
+    }
+
+    private JsonObject getProject(final Context context, final JsonObject payload) {
+        final com.steelaspect.cytrasyncmatica.projects.Project p = requireProject(context, payload);
+        final JsonObject o = new JsonObject();
+        o.add("project", BridgeJson.project(p, context, context.getBridge().isHideCoordinates()));
+        final com.steelaspect.cytrasyncmatica.materials.CombinedList.Combined c = context.getProjects().combined(p);
+        o.add("top_remaining", BridgeJson.topRemaining(c.list(), 5));
+        return o;
+    }
+
+    /** create / delete / rename / add / remove, on behalf of a player with cytra-syncmatica.project.manage. */
+    private CompletableFuture<JsonObject> projectAction(final Context context, final JsonObject payload) {
+        final String action = str(payload, "action", null);
+        final UUID uuid = uuid(str(payload, "mc_uuid", null));
+        if (action == null || !List.of("create", "delete", "rename", "add", "remove").contains(action)) {
+            throw new IllegalArgumentException("action must be one of create, delete, rename, add, remove");
+        }
+        if (uuid == null) {
+            throw new IllegalArgumentException("missing or malformed mc_uuid");
+        }
+        final MinecraftServer server = context.getMinecraftServer();
+        final GameProfile profile = resolveProfile(server, uuid);
+        if (profile == null) {
+            throw new IllegalArgumentException("unknown player " + uuid + ": never joined this server");
+        }
+        final CompletableFuture<Boolean> allowed = Permissions.check(profile, com.steelaspect.cytrasyncmatica.projects.ProjectAccess.MANAGE_PERMISSION,
+                com.steelaspect.cytrasyncmatica.projects.ProjectAccess.MANAGE_PERMISSION_LEVEL, server);
+        final CompletableFuture<JsonObject> out = new CompletableFuture<>();
+        allowed.whenComplete((ok, err) -> onServerThread(context, () -> {
+            try {
+                if (err != null) {
+                    throw new IllegalStateException("permission check failed: " + err.getMessage());
+                }
+                if (!Boolean.TRUE.equals(ok)) {
+                    throw new IllegalStateException("player " + profile.name() + " is not permitted to manage projects (needs "
+                            + com.steelaspect.cytrasyncmatica.projects.ProjectAccess.MANAGE_PERMISSION + ")");
+                }
+                final PlayerIdentifier by = context.getPlayerIdentifierProvider().createOrGet(profile.id(), profile.name());
+                final com.steelaspect.cytrasyncmatica.service.ProjectService projects = context.getProjects();
+                com.steelaspect.cytrasyncmatica.projects.Project project;
+                boolean changed = true;
+                switch (action) {
+                    case "create" -> project = projects.create(str(payload, "name", ""), by);
+                    case "delete" -> {
+                        project = requireProject(context, payload);
+                        changed = projects.delete(project, by);
+                    }
+                    case "rename" -> {
+                        project = requireProject(context, payload);
+                        projects.rename(project, str(payload, "name", ""), by);
+                    }
+                    default -> {
+                        project = requireProject(context, payload);
+                        final ServerPlacement placement = requirePlacement(context, payload);
+                        changed = "add".equals(action) ? projects.addMember(project, placement, by) : projects.removeMember(project, placement, by);
+                    }
+                }
+                final JsonObject o = new JsonObject();
+                o.addProperty("action", action);
+                o.addProperty("changed", changed);
+                o.add("project", BridgeJson.project(project, context, context.getBridge().isHideCoordinates()));
+                out.complete(o);
+            } catch (final Throwable failure) {
+                out.completeExceptionally(failure);
+            }
+        }));
+        return out;
+    }
+
+    /** Either a shared schematic or a project. */
+    private record Target(ServerPlacement placement, com.steelaspect.cytrasyncmatica.projects.Project project) {
+        boolean isProject() {
+            return project != null;
+        }
+
+        String name() {
+            return isProject() ? project.getName() : placement.getName();
+        }
+
+        JsonObject header() {
+            final JsonObject o = new JsonObject();
+            if (isProject()) {
+                o.addProperty("project_id", project.getId().toString());
+                o.addProperty("project", project.getName());
+            } else {
+                o.addProperty("schematic_id", placement.getId().toString());
+                o.addProperty("schematic", placement.getName());
+            }
+            return o;
+        }
+    }
+
+    /** {@code project_id} / {@code project} win over {@code schematic_id} / {@code schematic}. */
+    private static Target requireTarget(final Context context, final JsonObject payload) {
+        if (payload != null && (payload.has("project_id") || payload.has("project"))) {
+            return new Target(null, requireProject(context, payload));
+        }
+        return new Target(requirePlacement(context, payload), null);
+    }
+
+    private static com.steelaspect.cytrasyncmatica.projects.Project requireProject(final Context context, final JsonObject payload) {
+        if (context.getProjects() == null) {
+            throw new IllegalStateException("projects are unavailable");
+        }
+        final String id = str(payload, "project_id", null);
+        if (id != null) {
+            final com.steelaspect.cytrasyncmatica.projects.Project p = context.getProjects().get(uuid(id));
+            if (p != null) {
+                return p;
+            }
+        }
+        final String name = str(payload, "project", null);
+        if (name != null) {
+            final Optional<com.steelaspect.cytrasyncmatica.projects.Project> p = context.getProjects().findByName(name);
+            if (p.isPresent()) {
+                return p.get();
+            }
+        }
+        throw new IllegalArgumentException("unknown project " + (name != null ? name : id != null ? id : "(none given)"));
     }
 
     private JsonObject linkClaim(final Context context, final JsonObject payload) {

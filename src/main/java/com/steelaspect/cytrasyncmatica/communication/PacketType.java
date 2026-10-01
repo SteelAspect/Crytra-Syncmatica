@@ -52,7 +52,13 @@ public enum PacketType {
     /** C2S: please send me the list of this placement. */
     MATERIAL_REQUEST("material_request"),
     /** C2S: change one entry (add/set/done/reset). */
-    MATERIAL_EDIT("material_edit");
+    MATERIAL_EDIT("material_edit"),
+    /** server -> client: every project (on request and after each change) */
+    PROJECT_LIST("project_list"),
+    /** client -> server: please send the project list */
+    PROJECT_REQUEST("project_request"),
+    /** client -> server: create / delete / add member / remove member (permission checked server-side) */
+    PROJECT_MANAGE("project_manage");
 
     /** Our own channel namespace. Deliberately not the cytra-syncmatica one: the wire format differs. */
     public static final String NAMESPACE = "cytra-syncmatica";
