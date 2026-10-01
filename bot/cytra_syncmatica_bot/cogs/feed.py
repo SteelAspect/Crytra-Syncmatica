@@ -45,7 +45,15 @@ class Feed(commands.Cog):
         if not self.cfg.syncmatica.announce_schematic_shared:
             return
         s = payload.get("schematic") or {}
-        await self._send(embed=ui.schematic_embed(s, self.cfg.server.name))
+        embed = ui.schematic_embed(s, self.cfg.server.name)
+        file = None
+        if self.cfg.syncmatica.feed_preview and (s.get("preview") or {}).get("available") and s.get("id"):
+            file = await self.bot.preview_file({"schematic_id": s["id"]})
+        if file is not None:
+            embed.set_image(url="attachment://preview.png")
+            await self._send(embed=embed, file=file)
+        else:
+            await self._send(embed=embed)
 
     async def ev_schematic_updated(self, payload: dict) -> None:
         s = payload.get("schematic") or {}

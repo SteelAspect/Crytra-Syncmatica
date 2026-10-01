@@ -129,6 +129,19 @@ class SyncmaticaBot(commands.Bot):
             raise ExtensionMissing(NOT_INSTALLED)
         return await self.link.ext(op, payload, timeout=timeout)
 
+    async def preview_file(self, target: dict, filename: str = "preview.png") -> "discord.File | None":
+        """The server-rendered top-down PNG as an attachment, or None when there is none."""
+        import base64
+        import io
+        try:
+            out = await self.ext("get_preview", target)
+        except Exception:
+            return None
+        data = out.get("png_base64")
+        if not data:
+            return None
+        return discord.File(io.BytesIO(base64.b64decode(data)), filename=filename)
+
     async def schematics(self, max_age: float = 30.0) -> list[dict]:
         """list_schematics, cached briefly for autocomplete."""
         now = time.monotonic()

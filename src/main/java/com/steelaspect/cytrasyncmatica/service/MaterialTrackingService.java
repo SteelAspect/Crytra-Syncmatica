@@ -142,7 +142,13 @@ public class MaterialTrackingService extends AbstractService {
     public void shutdown() {
         started = false;
         if (worker != null) {
+            // Let queued writes (lists, previews, projects) land before the folder is considered closed.
             worker.shutdown();
+            try {
+                worker.awaitTermination(10L, java.util.concurrent.TimeUnit.SECONDS);
+            } catch (final InterruptedException e) {
+                Thread.currentThread().interrupt();
+            }
             worker = null;
         }
         lists.clear();

@@ -316,6 +316,23 @@ class Schematics(commands.Cog):
         else:
             await interaction.followup.send(embed=e)
 
+    @schematic.command(name="preview", description="Top-down picture of a shared schematic (map colours)")
+    @app_commands.describe(name="Schematic name")
+    @app_commands.autocomplete(name=schematic_autocomplete)
+    async def preview(self, interaction: discord.Interaction, name: str) -> None:
+        await interaction.response.defer()
+        out = await self.bot.ext("get_preview", {"schematic": name})
+        import base64
+        png = base64.b64decode(out.get("png_base64") or "")
+        info = out.get("preview") or {}
+        e = discord.Embed(title=f"Preview: {out.get('schematic', name)}", colour=ui.Palette.INFO)
+        e.set_author(name=self.cfg.server.name)
+        e.description = (f"{info.get('blocks_x', '?')}×{info.get('blocks_z', '?')} blocks from above · "
+                         f"{info.get('width', '?')}×{info.get('height', '?')} px"
+                         + (f" · every {info['step']}. block" if info.get("step", 1) > 1 else ""))
+        e.set_image(url="attachment://preview.png")
+        await interaction.followup.send(embed=e, file=discord.File(io.BytesIO(png), filename="preview.png"))
+
     @schematic.command(name="layers", description="Build progress per layer, measured by the server")
     @app_commands.describe(name="Schematic name")
     @app_commands.autocomplete(name=schematic_autocomplete)

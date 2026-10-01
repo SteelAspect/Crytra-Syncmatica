@@ -72,6 +72,9 @@ public class SyncmaticManager {
         if (context.getMaterialTracking() != null) {
             context.getMaterialTracking().attachPlacement(placement);
         }
+        if (context.getPreviews() != null) {
+            context.getPreviews().attachPlacement(placement);
+        }
     }
 
     private void detachFromServices(final ServerPlacement placement) {
@@ -83,6 +86,9 @@ public class SyncmaticManager {
         }
         if (context.getMaterialTracking() != null) {
             context.getMaterialTracking().detachPlacement(placement);
+        }
+        if (context.getPreviews() != null) {
+            context.getPreviews().forget(placement.getId());
         }
     }
 

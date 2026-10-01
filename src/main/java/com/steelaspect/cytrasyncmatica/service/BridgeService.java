@@ -232,9 +232,9 @@ public class BridgeService extends AbstractService implements MaterialEventListe
     public JsonObject schematicPayload(final ServerPlacement placement) {
         final MaterialTrackingService materials = context.getMaterialTracking();
         final JsonObject o = new JsonObject();
-        o.add("schematic", BridgeJson.schematic(placement,
+        o.add("schematic", BridgeJson.withPreview(BridgeJson.schematic(placement,
                 materials == null ? null : materials.getList(placement),
-                materials == null ? null : materials.getStats(placement.getId()), hideCoordinates));
+                materials == null ? null : materials.getStats(placement.getId()), hideCoordinates), context, placement));
         return o;
     }
 

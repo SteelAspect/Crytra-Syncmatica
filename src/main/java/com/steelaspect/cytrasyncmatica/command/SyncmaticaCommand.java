@@ -61,6 +61,7 @@ public final class SyncmaticaCommand {
                 .then(exportArgument())
                 .then(whereArgument())
                 .then(shoppingArgument())
+                .then(previewArgument())
                 .then(linkArgument())
                 .then(projectCommands())
                 .then(rescanArgument());
@@ -390,6 +391,64 @@ public final class SyncmaticaCommand {
             return 0;
         }
         sendFeedback(context, (add ? "Added " : "Removed ") + placement.get().getName() + (add ? " to " : " from ") + found.get().getName());
+        return 1;
+    }
+
+    private static LiteralArgumentBuilder<ServerCommandSource> previewArgument() {
+        return CommandManager.literal("preview")
+                .then(CommandManager.argument("schematic", greedyString())
+                        .suggests(SyncmaticaCommand::suggestPlacementNames)
+                        .executes(SyncmaticaCommand::handlePreview));
+    }
+
+    /** Copies the rendered top-down PNG into the exports folder. */
+    private static int handlePreview(final CommandContext<ServerCommandSource> context) {
+        final Context syncmaticaContext = Syncmatica.getContext(Syncmatica.SERVER_CONTEXT);
+        if (syncmaticaContext == null || syncmaticaContext.getPreviews() == null) {
+            context.getSource().sendError(literal("Previews are unavailable"));
+            return 0;
+        }
+        final String name = context.getArgument("schematic", String.class);
+        final Optional<ServerPlacement> found = findPlacementByName(syncmaticaContext, name);
+        if (found.isEmpty()) {
+            context.getSource().sendError(literal("Unknown shared schematic: " + name));
+            return 0;
+        }
+        final com.steelaspect.cytrasyncmatica.service.PreviewService previews = syncmaticaContext.getPreviews();
+        if (!previews.isEnabled()) {
+            context.getSource().sendError(literal("Previews are disabled (preview.enabled)"));
+            return 0;
+        }
+        final com.steelaspect.cytrasyncmatica.service.PreviewService.Info info = previews.getInfo(found.get().getId());
+        if (info == null) {
+            final String error = previews.getError(found.get().getId());
+            context.getSource().sendError(literal(error == null ? "No preview yet for " + found.get().getName() + " (still rendering?)" : "Preview failed: " + error));
+            return 0;
+        }
+        final ServerCommandSource source = context.getSource();
+        final java.nio.file.Path target = new File(syncmaticaContext.getConfigFolder(), "exports").toPath()
+                .resolve(com.steelaspect.cytrasyncmatica.service.MaterialTrackingService.safeFileName(found.get().getName()) + ".png");
+        previews.getPng(found.get().getId()).whenComplete((png, error) -> {
+            final Runnable reply = () -> {
+                if (error != null) {
+                    source.sendError(literal("Preview export failed: " + error.getMessage()));
+                    return;
+                }
+                try {
+                    Files.createDirectories(target.getParent());
+                    Files.write(target, png);
+                    source.sendFeedback(() -> literal("Preview of '" + found.get().getName() + "' (" + info.width() + "×" + info.height()
+                            + " px, " + info.blocksX() + "×" + info.blocksZ() + " blocks) written to " + target), false);
+                } catch (final IOException e) {
+                    source.sendError(literal("Preview export failed: " + e.getMessage()));
+                }
+            };
+            if (source.getServer() != null) {
+                source.getServer().execute(reply);
+            } else {
+                reply.run();
+            }
+        });
         return 1;
     }
 

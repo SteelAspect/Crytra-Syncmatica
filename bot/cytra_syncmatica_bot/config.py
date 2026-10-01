@@ -63,6 +63,7 @@ class ServerConfig:
 class SyncmaticaConfig:
     page_size: int = 15
     feed_edit: bool = True
+    feed_preview: bool = True
     announce_item_completed: bool = True
     announce_group_completed: bool = True
     announce_project_completed: bool = True

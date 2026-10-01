@@ -38,6 +38,8 @@ final class ServiceConfigRegistryTest {
             expected.put("sharing.hide_coordinates_without_permission", false);
             expected.put("materials.enabled", true);
             expected.put("materials.max_schematic_blocks", 8_000_000);
+            expected.put("preview.enabled", true);
+            expected.put("preview.max_pixels", 1_048_576);
             expected.put("bridge.enabled", true);
             expected.put("bridge.batch_seconds", 5);
             expected.put("bridge.queue_limit", 500);
@@ -59,7 +61,7 @@ final class ServiceConfigRegistryTest {
             }
 
             assertEquals(expected, actual);
-            assertEquals(16, actual.size());
+            assertEquals(18, actual.size());
             assertFalse(actual.containsKey("checkupdate"));
             assertFalse(actual.containsKey("check_pre_release"));
         } finally {

@@ -154,7 +154,14 @@ config, the UI, the lang files, the docs and the build:
   comparing Litematica's schematic world with the real world in every mode,
   a "Layer Y: x% · Build: y%" line at the top of the material HUD
   (`hudLayerLine`), hotkey `openLayerProgress`, `layerScanPerTick` setting.
+- Top-down previews (Step 3.4): the server renders a map-colour PNG of every
+  shared schematic on a background thread (on share, update and load; kept in
+  `<world>/cytra-syncmatica/previews/` and restored after a restart),
+  `preview` config section (`enabled`, `max_pixels`),
+  `/cytra-syncmatica preview <schematic>` writes it to
+  `config/cytra-syncmatica/exports/<name>.png`, bridge `get_preview` plus a
+  `preview` field on every schematic object.
 - Standalone Discord bot in `bot/` (own application, config, SQLite):
   `/link`, `/unlink`, `/whoami`, `/links`, `/schematic list|info|materials|where`,
-  `/schematic groups`, `/schematic shopping`, `/schematic layers`, `/materials`, `/project …`, a group filter in the materials view,
+  `/schematic groups`, `/schematic shopping`, `/schematic layers`, `/schematic preview`, `/materials`, `/project …`, a group filter in the materials view,
   live feed channel.

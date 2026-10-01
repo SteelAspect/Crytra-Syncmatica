@@ -77,6 +77,24 @@ public final class BridgeJson {
         return o;
     }
 
+    /** Adds {@code preview: {available, width, height, ...}} from the preview service. */
+    public static JsonObject withPreview(final JsonObject schematic, final Context context, final ServerPlacement p) {
+        final JsonObject preview = new JsonObject();
+        final com.steelaspect.cytrasyncmatica.service.PreviewService previews = context.getPreviews();
+        final com.steelaspect.cytrasyncmatica.service.PreviewService.Info info = previews == null ? null : previews.getInfo(p.getId());
+        if (info != null) {
+            schematic.add("preview", info.toJson());
+            return schematic;
+        }
+        preview.addProperty("available", false);
+        final String error = previews == null ? "previews are unavailable" : previews.getError(p.getId());
+        if (error != null) {
+            preview.addProperty("error", error);
+        }
+        schematic.add("preview", preview);
+        return schematic;
+    }
+
     /** Build completion of a placement from its scanned sub-regions, plus layer counts when a service is given. */
     public static JsonObject build(final ServerPlacement p, final com.steelaspect.cytrasyncmatica.service.BuildService build) {
         final JsonObject b = new JsonObject();

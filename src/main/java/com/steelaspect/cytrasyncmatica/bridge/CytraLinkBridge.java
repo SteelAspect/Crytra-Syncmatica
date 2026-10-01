@@ -126,6 +126,8 @@ public final class CytraLinkBridge implements LinkExtension, BridgeSink {
                 return done(getGroups(context, payload));
             case "get_layers":
                 return done(getLayers(context, payload));
+            case "get_preview":
+                return getPreview(context, payload);
             case "list_projects":
                 return done(listProjects(context));
             case "get_project":
@@ -160,7 +162,7 @@ public final class CytraLinkBridge implements LinkExtension, BridgeSink {
         o.addProperty("coordinates_hidden", context.getBridge().isHideCoordinates());
         o.addProperty("queued_events", context.getBridge().queuedEvents());
         final JsonArray ops = new JsonArray();
-        for (final String s : new String[] {"ping", "list_schematics", "get_schematic", "get_materials", "get_groups", "get_shopping_list", "get_where", "material_action", "get_layers", "list_projects", "get_project", "project_action", "link_claim"}) {
+        for (final String s : new String[] {"ping", "list_schematics", "get_schematic", "get_materials", "get_groups", "get_shopping_list", "get_where", "material_action", "get_layers", "get_preview", "list_projects", "get_project", "project_action", "link_claim"}) {
             ops.add(s);
         }
         o.add("ops", ops);
@@ -174,8 +176,8 @@ public final class CytraLinkBridge implements LinkExtension, BridgeSink {
         final List<ServerPlacement> all = new ArrayList<>(context.getSyncmaticManager().getAll());
         all.sort((a, b) -> a.getName().compareToIgnoreCase(b.getName()));
         for (final ServerPlacement p : all) {
-            arr.add(BridgeJson.schematic(p, materials == null ? null : materials.getList(p),
-                    materials == null ? null : materials.getStats(p.getId()), hide));
+            arr.add(BridgeJson.withPreview(BridgeJson.schematic(p, materials == null ? null : materials.getList(p),
+                    materials == null ? null : materials.getStats(p.getId()), hide), context, p));
         }
         final JsonObject o = new JsonObject();
         o.add("schematics", arr);
@@ -186,8 +188,8 @@ public final class CytraLinkBridge implements LinkExtension, BridgeSink {
         final ServerPlacement p = requirePlacement(context, payload);
         final MaterialTrackingService materials = context.getMaterialTracking();
         final JsonObject o = new JsonObject();
-        o.add("schematic", BridgeJson.schematic(p, materials == null ? null : materials.getList(p),
-                materials == null ? null : materials.getStats(p.getId()), context.getBridge().isHideCoordinates()));
+        o.add("schematic", BridgeJson.withPreview(BridgeJson.schematic(p, materials == null ? null : materials.getList(p),
+                materials == null ? null : materials.getStats(p.getId()), context.getBridge().isHideCoordinates()), context, p));
         final String error = materials == null ? null : materials.getExtractionError(p.getId());
         if (error != null) {
             o.addProperty("materials_error", error);
@@ -405,6 +407,35 @@ public final class CytraLinkBridge implements LinkExtension, BridgeSink {
         o.addProperty("layers_total", progress.size());
         o.addProperty("layers_complete", done);
         return o;
+    }
+
+    /** The top-down PNG, base64 encoded; rendered when the schematic was shared/updated/loaded. */
+    private CompletableFuture<JsonObject> getPreview(final Context context, final JsonObject payload) {
+        final ServerPlacement p = requirePlacement(context, payload);
+        final com.steelaspect.cytrasyncmatica.service.PreviewService previews = context.getPreviews();
+        if (previews == null || !previews.isEnabled()) {
+            throw new IllegalStateException("previews are disabled (preview.enabled)");
+        }
+        final com.steelaspect.cytrasyncmatica.service.PreviewService.Info info = previews.getInfo(p.getId());
+        if (info == null) {
+            final String error = previews.getError(p.getId());
+            throw new IllegalStateException(error == null ? "no preview yet for " + p.getName() : "preview failed: " + error);
+        }
+        final CompletableFuture<JsonObject> out = new CompletableFuture<>();
+        previews.getPng(p.getId()).whenComplete((png, err) -> {
+            if (err != null) {
+                out.completeExceptionally(new IllegalStateException("could not read the preview: " + err.getMessage()));
+                return;
+            }
+            final JsonObject o = new JsonObject();
+            o.addProperty("schematic_id", p.getId().toString());
+            o.addProperty("schematic", p.getName());
+            o.add("preview", info.toJson());
+            o.addProperty("format", "png");
+            o.addProperty("png_base64", java.util.Base64.getEncoder().encodeToString(png));
+            out.complete(o);
+        });
+        return out;
     }
 
     // -- projects ----------------------------------------------------------------

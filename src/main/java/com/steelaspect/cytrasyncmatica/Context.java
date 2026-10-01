@@ -34,6 +34,7 @@ public class Context {
     private final MaterialTrackingService materialTracking;
     private final BridgeService bridge;
     private final ProjectService projects;
+    private final PreviewService previews;
     private MinecraftServer minecraftServer;
     private ConfigRegistry configRegistry;
     private ConfigStore configStore;
@@ -45,6 +46,7 @@ public class Context {
     private boolean materialsStarted;
     private boolean bridgeStarted;
     private boolean projectsStarted;
+    private boolean previewsStarted;
     private boolean buildStarted;
     private boolean debugStarted;
     private boolean managerStarted;
@@ -87,6 +89,8 @@ public class Context {
             bridge.setContext(this);
             projects = new ProjectService();
             projects.setContext(this);
+            previews = new PreviewService();
+            previews.setContext(this);
         } else {
             quota = null;
             sharingService = null;
@@ -94,6 +98,7 @@ public class Context {
             materialTracking = null;
             bridge = null;
             projects = null;
+            previews = null;
         }
         playerIdentifierProvider = new PlayerIdentifierProvider(this);
         debugService = new DebugService();
@@ -139,6 +144,11 @@ public class Context {
     /** null on the client. */
     public ProjectService getProjects() {
         return projects;
+    }
+
+    /** null on the client. */
+    public PreviewService getPreviews() {
+        return previews;
     }
 
     public BridgeService getBridge() {
@@ -258,6 +268,10 @@ public class Context {
                 projects.startup();
                 projectsStarted = true;
             }
+            if (previews != null) {
+                previews.startup();
+                previewsStarted = true;
+            }
             if (bridge != null) {
                 bridge.startup();
                 bridgeStarted = true;
@@ -348,6 +362,9 @@ public class Context {
             if (materialTracking != null) {
                 needsRewrite |= loadConfigurationForService(materialTracking, configuration, attemptToLoad);
             }
+            if (previews != null) {
+                needsRewrite |= loadConfigurationForService(previews, configuration, attemptToLoad);
+            }
             if (bridge != null) {
                 needsRewrite |= loadConfigurationForService(bridge, configuration, attemptToLoad);
             }
@@ -360,6 +377,7 @@ public class Context {
             sharingService.registerConfigOptions(configRegistry);
             buildService.registerConfigOptions(configRegistry);
             materialTracking.registerConfigOptions(configRegistry);
+            previews.registerConfigOptions(configRegistry);
             bridge.registerConfigOptions(configRegistry);
             debugService.registerConfigOptions(configRegistry);
             configStore = new ConfigStore(getConfigFile().toPath(), configuration, configRegistry);
@@ -452,6 +470,10 @@ public class Context {
         if (bridgeStarted) {
             stop(bridge::shutdown, startupFailure);
             bridgeStarted = false;
+        }
+        if (previewsStarted) {
+            stop(previews::shutdown, startupFailure);
+            previewsStarted = false;
         }
         if (projectsStarted) {
             stop(projects::shutdown, startupFailure);

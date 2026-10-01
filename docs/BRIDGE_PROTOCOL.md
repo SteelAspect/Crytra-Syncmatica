@@ -51,7 +51,7 @@ a UUID prefix of at least 8 characters).
 {"t":"ext","id":1,"ns":"cytra-syncmatica","v":1,"op":"ping","payload":{}}
 ```
 ```json
-{"t":"res","id":1,"ok":true,"out":{"mod":"1.0.0+1.21.11","protocol":1,"schematics":3,"materials_enabled":true,"coordinates_hidden":false,"queued_events":0,"ops":["ping","list_schematics","get_schematic","get_materials","get_groups","get_shopping_list","get_where","material_action","get_layers","list_projects","get_project","project_action","link_claim"]}}
+{"t":"res","id":1,"ok":true,"out":{"mod":"1.0.0+1.21.11","protocol":1,"schematics":3,"materials_enabled":true,"coordinates_hidden":false,"queued_events":0,"ops":["ping","list_schematics","get_schematic","get_materials","get_groups","get_shopping_list","get_where","material_action","get_layers","get_preview","list_projects","get_project","project_action","link_claim"]}}
 ```
 
 ### `list_schematics`
@@ -253,6 +253,28 @@ blocks without an item form are left out). Every schematic object
 Errors: `build management is disabled`, `build completion tracking is
 disabled (build.completion_enabled)`.
 
+### `get_preview`
+
+A top-down picture of the schematic in vanilla map colours (each column shows
+its highest block, lit by height), rendered by the server on a background
+thread whenever the schematic is shared, updated or loaded, and kept under
+`<world>/cytra-syncmatica/previews/`. Small schematics are scaled up to 16 px
+per block; big ones are sampled (every `step`-th block) so the image stays
+within `preview.max_pixels` and the PNG under 5.5 MB (Cytra Link's frame
+limit, base64 included).
+
+```json
+{"t":"ext","id":14,"ns":"cytra-syncmatica","v":1,"op":"get_preview","payload":{"schematic":"Iron farm"}}
+```
+```json
+{"t":"res","id":14,"ok":true,"out":{"schematic_id":"8f2a6c1e-1b2c-4d3e-9f00-112233445566","schematic":"Iron farm","preview":{"available":true,"width":96,"height":96,"blocks_x":6,"blocks_z":6,"scale":16,"step":1,"bytes":646,"generated_at":1790000000000},"format":"png","png_base64":"iVBORw0KGgo..."}}
+```
+
+Every schematic object also carries `"preview": {"available": true, ...same
+fields...}` or `{"available": false, "error": "..."}` while nothing is
+rendered yet. Errors: `previews are disabled (preview.enabled)`, `no preview
+yet for <name>`, `preview failed: <reason>`.
+
 ### `list_projects`
 
 ```json
@@ -435,7 +457,9 @@ any queued events. The bot should re-fetch what it displays.
 
 Live changes: `/cytra-syncmatica config set bridge <key> <value>`.
 
-## Not yet in this version
+## Server configuration, other sections
 
-`get_preview` is added by the last Step 3 extra and documented here when it
-lands. Until then it answers `unknown op get_preview`.
+`preview.enabled` (default `true`) and `preview.max_pixels` (default
+1048576, 65536–16777216) control `get_preview`; `build.completion_enabled`
+controls `get_layers`; `materials.enabled` controls everything material
+related. All are live through `/cytra-syncmatica config set <section> <key> <value>`.

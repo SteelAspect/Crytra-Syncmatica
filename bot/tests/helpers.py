@@ -44,6 +44,7 @@ class FakeSyncmaticaExtension:
         self.codes = {"K7P2XQ": (OP_UUID, "OpPlayer")}
         self.actions: list[dict] = []
         self.hide_coordinates = False
+        self.preview_png_b64 = "iVBORw0KGgoAAAANSUhEUgAAAAIAAAACCAIAAAD91JpzAAAADklEQVR4nGMoAAMGCAUAJM4FQe9XqBgAAAAASUVORK5CYII="
         self.layers = [{"y": 64 + i, "expected": 36, "placed": 36 if i < 2 else 0} for i in range(4)]
         self.projects: dict[str, dict] = {}  # id -> {"id", "name", "members": [schematic ids]}
         self.project_actions: list[dict] = []
@@ -78,7 +79,8 @@ class FakeSyncmaticaExtension:
         s = {"id": SCHEMATIC_ID, "name": "Iron farm", "file_name": "iron_farm", "owner": {"uuid": OP_UUID, "name": "OpPlayer"},
              "last_modified_by": None, "created_at": 1, "modified_at": 2, "dimension": "minecraft:overworld", "rotation": "NONE",
              "mirror": "NONE", "coordinates_hidden": self.hide_coordinates, "size": {"x": 6, "y": 4, "z": 6}, "block_count": 138,
-             "unique_blocks": 5, "materials": self.summary()}
+             "unique_blocks": 5, "materials": self.summary(),
+             "preview": {"available": True, "width": 2, "height": 2, "blocks_x": 6, "blocks_z": 6, "scale": 1, "step": 1, "bytes": 70, "generated_at": 5}}
         if not self.hide_coordinates:
             s["origin"] = {"x": 120, "y": 64, "z": -340}
             s["centre"] = {"x": 123, "y": 66, "z": -337}
@@ -115,6 +117,12 @@ class FakeSyncmaticaExtension:
             for it in out.get("items") or []:
                 it["parts"] = [{"schematic_id": SCHEMATIC_ID, "schematic": "Iron farm", "required": it["required"], "gathered": it["gathered"], "remaining": it["remaining"]}]
             return out
+        if op == "get_preview":
+            name = payload.get("schematic"); sid = payload.get("schematic_id")
+            if sid not in (None, SCHEMATIC_ID) or (name not in (None, "Iron farm", "iron_farm")):
+                raise ExtensionError(f"unknown schematic {name or sid}")
+            return {"schematic_id": SCHEMATIC_ID, "schematic": "Iron farm", "format": "png", "png_base64": self.preview_png_b64,
+                    "preview": {"available": True, "width": 2, "height": 2, "blocks_x": 6, "blocks_z": 6, "scale": 1, "step": 1, "bytes": 70, "generated_at": 5}}
         if op == "get_layers":
             name = payload.get("schematic"); sid = payload.get("schematic_id")
             if sid not in (None, SCHEMATIC_ID) or (name not in (None, "Iron farm", "iron_farm")):

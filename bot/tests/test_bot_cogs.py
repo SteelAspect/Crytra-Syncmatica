@@ -177,6 +177,20 @@ async def test_project_commands_manage_and_show_projects():
         await shutdown(bot, server)
 
 
+async def test_preview_command_attaches_the_png():
+    bot, server, ext = await make_bot()
+    try:
+        cog = Schematics(bot)
+        it = FakeInteraction(make_member(1), bot)
+        await cog.preview.callback(cog, it, "Iron farm")
+        sent = it.followup.sent[-1]
+        assert sent["embed"].title == "Preview: Iron farm" and sent["file"].filename == "preview.png"
+        assert sent["file"].fp.read(8) == b"\x89PNG\r\n\x1a\n"
+        assert sent["embed"].image.url == "attachment://preview.png"
+    finally:
+        await shutdown(bot, server)
+
+
 async def test_layers_command_shows_build_progress_per_layer():
     bot, server, ext = await make_bot()
     try:
@@ -234,6 +248,7 @@ async def test_feed_edits_one_message_per_schematic_and_refreshes_on_resync():
         feed = Feed(bot)
         await feed.on_link_event("schematic_shared", {"schematic": ext.schematic()}, 1)
         assert channel.sent[-1]["embed"].title == "Iron farm"
+        assert channel.sent[-1]["file"].filename == "preview.png", "the share post carries the preview"
         await feed.on_link_event("list_created", {"schematic": ext.schematic(), "top_remaining": []}, 2)
         first = await bot.db.get_feed_message(SCHEMATIC_ID)
         assert first is not None and len(channel.sent) == 2
