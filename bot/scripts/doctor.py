@@ -118,9 +118,6 @@ async def main_async(args) -> int:
     except ConfigError as exc:
         r.add(FAIL, f"{args.config} loads", str(exc)); return r.summarise()
     r.add(OK, f"{args.config} loads")
-    if cfg.linking.shared_db_path:
-        p = pathlib.Path(cfg.linking.shared_db_path)
-        r.add(OK if p.is_file() else WARN, "linking.shared_db_path", str(p) + ("" if p.is_file() else " (missing: fallback links unavailable)"))
     if args.offline:
         r.add(SKIP, "Cytra Link", "--offline"); r.add(SKIP, "Discord", "--offline")
     else:

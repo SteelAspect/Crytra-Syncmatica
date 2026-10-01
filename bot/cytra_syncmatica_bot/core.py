@@ -13,7 +13,7 @@ from discord import app_commands
 from discord.ext import commands
 
 from cytra_syncmatica_bot.config import Config
-from cytra_syncmatica_bot.db import Database, lookup_shared_link
+from cytra_syncmatica_bot.db import Database
 from cytra_syncmatica_bot.modlink import EXTENSION, ExtensionMissing, LinkError, LinkUnavailable, ModLink
 
 log = logging.getLogger("bot")
@@ -155,13 +155,9 @@ class SyncmaticaBot(commands.Bot):
     # -- accounts --------------------------------------------------------------------
 
     async def resolve_player(self, discord_id: int) -> tuple[str, str] | None:
-        """(mc_uuid, mc_name) for a Discord user: own links first, then the optional
-        read-only cytra-bridge database."""
+        """(mc_uuid, mc_name) for a Discord user from this bot's own links."""
         link = await self.db.get_link_by_discord(discord_id)
-        if link is not None:
-            return link.mc_uuid, link.mc_name
-        shared = lookup_shared_link(self.cfg.linking.shared_db_path, discord_id)
-        return shared
+        return None if link is None else (link.mc_uuid, link.mc_name)
 
     def is_staff(self, user: discord.abc.User) -> bool:
         if not isinstance(user, discord.Member):

@@ -76,7 +76,6 @@ class SyncmaticaConfig:
 @dataclass
 class LinkingConfig:
     enabled: bool = True
-    shared_db_path: str = ""
 
 
 @dataclass
@@ -150,14 +149,13 @@ def load_config(path: str | Path) -> Config:
     if not server_cfg.host:
         raise ConfigError("server.host is required (the Minecraft server address)")
     if not server_cfg.secret:
-        raise ConfigError("server.secret is required (secret= from config/cytra-link.properties on the server)")
+        raise ConfigError("server.secret is required (secret= from config/cytra-link.properties on the Minecraft server)")
     if not discord_cfg.guild_id:
         raise ConfigError("discord.guild_id is required")
     if sync_cfg.page_size < 1 or sync_cfg.page_size > 25:
         raise ConfigError("syncmatica.page_size must be 1..25 (a Discord select menu holds 25 entries)")
     log_cfg.level = str(log_cfg.level).upper()
     log_cfg.file = _resolve(base_dir, log_cfg.file)
-    link_cfg.shared_db_path = _resolve(base_dir, link_cfg.shared_db_path) or ""
     return Config(discord=discord_cfg, server=server_cfg, syncmatica=sync_cfg, linking=link_cfg, logging=log_cfg,
                   database=_resolve(base_dir, str(raw.get("database", "syncmatica-bot.sqlite3"))) or "syncmatica-bot.sqlite3",
                   base_dir=base_dir)

@@ -161,7 +161,9 @@ config, the UI, the lang files, the docs and the build:
   `/cytra-syncmatica preview <schematic>` writes it to
   `config/cytra-syncmatica/exports/<name>.png`, bridge `get_preview` plus a
   `preview` field on every schematic object.
-- Standalone Discord bot in `bot/` (own application, config, SQLite):
+- Standalone Discord bot in `bot/` (a brand-new bot with its own Discord
+  application, code, config and SQLite file; it shares nothing with other
+  bots and only speaks Cytra Link's wire protocol to the server):
   `/link`, `/unlink`, `/whoami`, `/links`, `/schematic list|info|materials|where`,
   `/schematic groups`, `/schematic shopping`, `/schematic layers`, `/schematic preview`, `/materials`, `/project …`, a group filter in the materials view,
   live feed channel.

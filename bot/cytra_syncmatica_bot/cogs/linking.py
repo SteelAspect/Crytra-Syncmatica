@@ -62,9 +62,7 @@ class Linking(commands.Cog):
             await interaction.response.send_message(
                 "Not linked. Run `/cytra-syncmatica link` in game, then `/link <code>` here.", ephemeral=True)
             return
-        own = await self.bot.db.get_link_by_discord(interaction.user.id)
-        source = "" if own else " (from the shared cytra-bridge database)"
-        await interaction.response.send_message(f"You are **{player[1]}** (`{player[0]}`){source}.", ephemeral=True)
+        await interaction.response.send_message(f"You are **{player[1]}** (`{player[0]}`).", ephemeral=True)
 
     @app_commands.command(name="links", description="Staff: list the linked accounts stored by this bot")
     @require_staff()

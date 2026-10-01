@@ -1,4 +1,5 @@
-# Cytra-Syncmatica Discord bot. Copy to config.yaml next to .env and fill in the IDs.
+# Cytra-Syncmatica bot: a standalone Discord bot for one Minecraft server.
+# Copy to config.yaml next to .env and fill in the IDs.
 # Values written as ${NAME} are read from the environment / .env.
 
 discord:
@@ -8,10 +9,10 @@ discord:
   staff_role_ids: []          # members with one of these roles may /unlink others and run /syncmatica refresh
 
 server:
-  name: "CMP"                 # shown in embeds
-  host: "cmp.example.com"     # the Minecraft server address (the game port, unless Cytra Link has its own port=)
+  name: "Survival"            # shown in embeds
+  host: "mc.example.com"      # the Minecraft server address (the game port, unless Cytra Link has its own port=)
   port: 25565
-  secret: ${MOD_LINK_SECRET}  # secret= from the server's config/cytra-link.properties
+  secret: ${CYTRA_LINK_SECRET}  # secret= from the server's config/cytra-link.properties
   timeout: 8.0                # seconds to wait for a reply
 
 syncmatica:
@@ -27,9 +28,6 @@ syncmatica:
 
 linking:
   enabled: true               # /link <code>, /unlink, /whoami (codes come from /cytra-syncmatica link in game)
-  # Optional: read Discord <-> Minecraft links from a cytra-bridge bot's database as a
-  # fallback (read-only), so players already linked there need not link again.
-  shared_db_path: ""
 
 database: "syncmatica-bot.sqlite3"
 

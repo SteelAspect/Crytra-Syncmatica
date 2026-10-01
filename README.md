@@ -172,8 +172,10 @@ completed, auto-count, pinned items) are in `client/tracker.json`.
 
 The server side is an extension of Cytra Link (`"cytra-link"` entrypoint,
 namespace `cytra-syncmatica`); the wire protocol with every message is in
-[docs/BRIDGE_PROTOCOL.md](docs/BRIDGE_PROTOCOL.md). The bot is in
-[`bot/`](bot/) with its own README: slash commands for schematics,
+[docs/BRIDGE_PROTOCOL.md](docs/BRIDGE_PROTOCOL.md). The bot is a brand-new,
+standalone bot in [`bot/`](bot/): its own Discord application, code, config,
+database and process, unrelated to any chat bots you run, and it can live on
+a different machine. Its README covers: slash commands for schematics,
 materials (buttons, group filter, per-item edits as your linked player, with
 the player's in-game permissions), projects, shopping lists, layers and
 previews, account linking (`/cytra-syncmatica link` in game, `/link <code>`

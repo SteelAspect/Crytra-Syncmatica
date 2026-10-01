@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-import sqlite3
 import time
 from dataclasses import dataclass
 from pathlib import Path
@@ -133,19 +132,3 @@ class Database:
     async def set_meta(self, key: str, value: str) -> None:
         await self.conn.execute("INSERT OR REPLACE INTO meta VALUES (?, ?)", (key, value))
         await self.conn.commit()
-
-
-def lookup_shared_link(shared_db_path: str, discord_id: int) -> tuple[str, str] | None:
-    """Read-only fallback into a cytra-bridge bot's database (table players: uuid, ign, discord_id).
-    Returns (uuid, name) or None. Never writes; a missing file or table is simply 'no link'."""
-    if not shared_db_path or not Path(shared_db_path).is_file():
-        return None
-    try:
-        conn = sqlite3.connect(f"file:{shared_db_path}?mode=ro", uri=True)
-        try:
-            row = conn.execute("SELECT uuid, ign FROM players WHERE discord_id = ?", (discord_id,)).fetchone()
-        finally:
-            conn.close()
-    except sqlite3.Error:
-        return None
-    return (str(row[0]).lower(), str(row[1])) if row else None

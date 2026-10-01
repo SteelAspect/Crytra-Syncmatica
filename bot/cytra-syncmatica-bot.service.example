@@ -1,0 +1,17 @@
+# systemd unit for the Cytra-Syncmatica bot (its own service, independent of any other bot).
+# Copy to /etc/systemd/system/cytra-syncmatica-bot.service (or ~/.config/systemd/user/ for a
+# user service), adjust the paths and user, then: systemctl enable --now cytra-syncmatica-bot
+[Unit]
+Description=Cytra-Syncmatica Discord bot
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+WorkingDirectory=/opt/cytra-syncmatica-bot
+ExecStart=/opt/cytra-syncmatica-bot/.venv/bin/python run.py
+Restart=on-failure
+RestartSec=5
+User=bot
+
+[Install]
+WantedBy=multi-user.target

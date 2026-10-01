@@ -19,9 +19,9 @@ OP_UUID = "069a79f4-44e9-4726-a5be-fca90e38aaf5"
 def make_cfg(**over) -> Config:
     cfg = Config(
         discord=DiscordConfig(token="t", guild_id=123, feed_channel_id=555, staff_role_ids=[9]),
-        server=ServerConfig(name="CMP", host="127.0.0.1", port=0, secret="s3cret", timeout=2.0),
+        server=ServerConfig(name="Survival", host="127.0.0.1", port=0, secret="s3cret", timeout=2.0),
         syncmatica=SyncmaticaConfig(page_size=3),
-        linking=LinkingConfig(enabled=True, shared_db_path=""),
+        linking=LinkingConfig(enabled=True),
         logging=LoggingConfig(level="INFO", file=None),
         database=":memory:",
         base_dir=Path("."),

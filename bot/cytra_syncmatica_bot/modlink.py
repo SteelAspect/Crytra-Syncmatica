@@ -1,8 +1,10 @@
-"""The bot's end of Cytra Link (0.3.0+): one encrypted TCP connection the bot
-opens to the Minecraft server. Mirrors mod/src/main/java/net/cytra/link in the
-cytra-bridge repository and bot/modlink.py there, trimmed to what this bot
-needs: hello/welcome, ping, generic requests, `ext` requests to the
-cytra-syncmatica extension, and `ev` events dispatched to the cogs.
+"""This bot's own client for the Cytra Link wire protocol (mod version
+0.3.0+): one encrypted TCP connection the bot opens to the Minecraft server's
+game port. It implements exactly what this bot needs: hello/welcome, ping,
+generic requests, `ext` requests to the cytra-syncmatica extension, and `ev`
+events dispatched to the cogs. The protocol is documented in
+docs/BRIDGE_PROTOCOL.md and in the Cytra Link mod's README; no other bot's
+code is involved.
 
 Wire format:
 1. bot -> mod: a Minecraft handshake packet whose address is
