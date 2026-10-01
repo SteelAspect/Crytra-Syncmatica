@@ -42,6 +42,9 @@ public class MixinMinecraftServer {
         if (context != null && context.getBuildService() != null) {
             context.getBuildService().tick((MinecraftServer) (Object) this);
         }
+        if (context != null && context.getBridge() != null) {
+            context.getBridge().tick();
+        }
         if (context != null && context.getSyncmaticManager() != null) {
             context.getSyncmaticManager().tickServer();
         }

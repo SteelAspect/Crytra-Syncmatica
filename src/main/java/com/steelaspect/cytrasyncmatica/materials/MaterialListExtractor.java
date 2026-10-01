@@ -38,15 +38,46 @@ public final class MaterialListExtractor {
     private MaterialListExtractor() {
     }
 
+    /** Shape of the schematic, for previews and the bridge. */
+    public record Stats(int sizeX, int sizeY, int sizeZ, long volume, long nonAirBlocks, int uniqueItems) {
+        public static final Stats EMPTY = new Stats(0, 0, 0, 0, 0, 0);
+
+        public com.google.gson.JsonObject toJson() {
+            final com.google.gson.JsonObject o = new com.google.gson.JsonObject();
+            o.addProperty("size_x", sizeX);
+            o.addProperty("size_y", sizeY);
+            o.addProperty("size_z", sizeZ);
+            o.addProperty("volume", volume);
+            o.addProperty("blocks", nonAirBlocks);
+            o.addProperty("unique_items", uniqueItems);
+            return o;
+        }
+
+        public static Stats fromJson(final com.google.gson.JsonObject o) {
+            if (o == null) {
+                return EMPTY;
+            }
+            return new Stats(o.has("size_x") ? o.get("size_x").getAsInt() : 0, o.has("size_y") ? o.get("size_y").getAsInt() : 0,
+                    o.has("size_z") ? o.get("size_z").getAsInt() : 0, o.has("volume") ? o.get("volume").getAsLong() : 0,
+                    o.has("blocks") ? o.get("blocks").getAsLong() : 0, o.has("unique_items") ? o.get("unique_items").getAsInt() : 0);
+        }
+    }
+
     public static final class Result {
         public final Map<String, Integer> requirements;
         public final long totalBlocks;
         public final String error;
+        public final Stats stats;
 
         Result(final Map<String, Integer> requirements, final long totalBlocks, final String error) {
+            this(requirements, totalBlocks, error, Stats.EMPTY);
+        }
+
+        Result(final Map<String, Integer> requirements, final long totalBlocks, final String error, final Stats stats) {
             this.requirements = requirements;
             this.totalBlocks = totalBlocks;
             this.error = error;
+            this.stats = stats;
         }
 
         public boolean ok() {
@@ -92,13 +123,17 @@ public final class MaterialListExtractor {
             return new Result(Map.of(), 0, "file missing");
         }
         long blocks = 0;
+        final int[] min = {Integer.MAX_VALUE, Integer.MAX_VALUE, Integer.MAX_VALUE};
+        final int[] max = {Integer.MIN_VALUE, Integer.MIN_VALUE, Integer.MIN_VALUE};
         try {
             final NbtCompound regions = NbtHelper.getCompound(LitematicNbt.readRoot(litematicFile, maxNbtBytes), "Regions");
             if (regions == null) {
                 return new Result(Map.of(), 0, "no regions");
             }
             for (final String regionName : regions.getKeys()) {
-                blocks = accumulateRegion(NbtHelper.getCompound(regions, regionName), totals, blocks, maxBlocks, resolver);
+                final NbtCompound region = NbtHelper.getCompound(regions, regionName);
+                blocks = accumulateRegion(region, totals, blocks, maxBlocks, resolver);
+                extend(region, min, max);
             }
         } catch (final LimitExceeded e) {
             return new Result(Map.of(), 0, "schematic exceeds the block limit of " + maxBlocks);
@@ -108,10 +143,32 @@ public final class MaterialListExtractor {
         }
         // sorted by item id for a stable order; counts clamped to int
         final Map<String, Integer> out = new TreeMap<>();
+        long nonAir = 0;
         for (final Map.Entry<String, Long> e : totals.entrySet()) {
             out.put(e.getKey(), (int) Math.min(Integer.MAX_VALUE, e.getValue()));
+            nonAir += e.getValue();
         }
-        return new Result(out, blocks, null);
+        final Stats stats = min[0] == Integer.MAX_VALUE ? Stats.EMPTY
+                : new Stats(max[0] - min[0], max[1] - min[1], max[2] - min[2], blocks, nonAir, out.size());
+        return new Result(out, blocks, null, stats);
+    }
+
+    /** Grows the enclosing box by one region (Litematica sizes may be negative: they point the other way). */
+    private static void extend(final NbtCompound region, final int[] min, final int[] max) {
+        if (region == null) {
+            return;
+        }
+        final int[] pos = NbtHelper.getIntArray(region, "Position");
+        final int[] size = NbtHelper.getIntArray(region, "Size");
+        if (pos == null || size == null || pos.length < 3 || size.length < 3) {
+            return;
+        }
+        for (int axis = 0; axis < 3; axis++) {
+            final int a = pos[axis];
+            final int b = size[axis] >= 0 ? pos[axis] + size[axis] : pos[axis] + size[axis] + 1;
+            min[axis] = Math.min(min[axis], Math.min(a, b));
+            max[axis] = Math.max(max[axis], Math.max(a, b) + (size[axis] >= 0 ? 0 : 1));
+        }
     }
 
     private static long accumulateRegion(final NbtCompound region, final Map<String, Long> totals,

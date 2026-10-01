@@ -15,7 +15,7 @@ public class Syncmatica {
 
     public static final String MOD_ID = "cytra-syncmatica";
     /** The upstream mod this is forked from; both installed at once cannot work (different wire format). */
-    public static final String UPSTREAM_MOD_ID = "cytra-syncmatica";
+    public static final String UPSTREAM_MOD_ID = "syncmatica" + "_r";
     public static final Identifier CLIENT_CONTEXT = Identifier.of(MOD_ID, "client_context");
     public static final Identifier SERVER_CONTEXT = Identifier.of(MOD_ID, "server_context");
     public static final UUID syncmaticaId = UUID.fromString("4c1b738f-56fa-4011-8273-498c972424ea");

@@ -57,6 +57,7 @@ public class MaterialTrackingService extends AbstractService {
 
     private final Map<UUID, MaterialList> lists = new HashMap<>();
     private final Map<UUID, String> extractionErrors = new HashMap<>();
+    private final Map<UUID, MaterialListExtractor.Stats> stats = new HashMap<>();
     private final List<MaterialEventListener> listeners = new CopyOnWriteArrayList<>();
     private ExecutorService worker;
     private boolean started;
@@ -144,6 +145,7 @@ public class MaterialTrackingService extends AbstractService {
         }
         lists.clear();
         extractionErrors.clear();
+        stats.clear();
     }
 
     // -- placements --------------------------------------------------------------
@@ -168,6 +170,7 @@ public class MaterialTrackingService extends AbstractService {
         }
         lists.remove(placement.getId());
         extractionErrors.remove(placement.getId());
+        stats.remove(placement.getId());
         final Path file = fileFor(placement.getId());
         runIo(() -> {
             try {
@@ -206,6 +209,7 @@ public class MaterialTrackingService extends AbstractService {
         extractionErrors.remove(id);
         final MaterialList list = lists.computeIfAbsent(id, k -> new MaterialList());
         list.applyRequirements(result.requirements);
+        stats.put(id, result.stats);
         save(id);
         broadcastList(placement);
         for (final MaterialEventListener l : listeners) {
@@ -223,6 +227,11 @@ public class MaterialTrackingService extends AbstractService {
 
     public String getExtractionError(final UUID placementId) {
         return extractionErrors.get(placementId);
+    }
+
+    /** Size and block counts from the last extraction; {@link MaterialListExtractor.Stats#EMPTY} when unknown. */
+    public MaterialListExtractor.Stats getStats(final UUID placementId) {
+        return stats.getOrDefault(placementId, MaterialListExtractor.Stats.EMPTY);
     }
 
     public Collection<UUID> trackedPlacements() {
@@ -303,6 +312,9 @@ public class MaterialTrackingService extends AbstractService {
         }
         try {
             final JsonObject o = JsonParser.parseString(Files.readString(file, StandardCharsets.UTF_8)).getAsJsonObject();
+            if (o.has("stats") && o.get("stats").isJsonObject()) {
+                stats.put(id, MaterialListExtractor.Stats.fromJson(o.getAsJsonObject("stats")));
+            }
             return MaterialList.fromJson(o);
         } catch (final Exception e) {
             LOGGER.warn("Could not read {}; starting a fresh list", file, e);
@@ -315,7 +327,12 @@ public class MaterialTrackingService extends AbstractService {
         if (list == null) {
             return;
         }
-        final String json = GSON.toJson(list.toJson());
+        final JsonObject o = list.toJson();
+        final MaterialListExtractor.Stats s = stats.get(id);
+        if (s != null) {
+            o.add("stats", s.toJson());
+        }
+        final String json = GSON.toJson(o);
         final Path file = fileFor(id);
         runIo(() -> writeAtomically(file, json));
     }

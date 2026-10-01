@@ -225,6 +225,9 @@ public class ServerCommunicationManager extends CommunicationManager {
                     notifyClose(modifier);
                 }
                 context.getSyncmaticManager().removePlacement(placement);
+                if (context.getBridge() != null) {
+                    context.getBridge().onSchematicRemoved(placement);
+                }
                 for (final ExchangeTarget client : broadcastTargets) {
                     final PacketByteBuf newPacketBuf = new PacketByteBuf(Unpooled.buffer());
                     newPacketBuf.writeUuid(placement.getId());
@@ -403,6 +406,9 @@ public class ServerCommunicationManager extends CommunicationManager {
         if (exchange instanceof ModifyExchangeServer && exchange.isSuccessful()) {
             final ServerPlacement placement = ((ModifyExchangeServer) exchange).getPlacement();
             broadcastPlacementUpdate(placement);
+            if (context.getBridge() != null) {
+                context.getBridge().onSchematicUpdated(placement);
+            }
         }
     }
 
@@ -462,6 +468,9 @@ public class ServerCommunicationManager extends CommunicationManager {
         context.getSyncmaticManager().addPlacement(placement);
         for (final ExchangeTarget target : broadcastTargets) {
             sendMetaData(placement, target);
+        }
+        if (context.getBridge() != null) {
+            context.getBridge().onSchematicShared(placement);
         }
         return true;
     }

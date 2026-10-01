@@ -32,6 +32,7 @@ public class Context {
     private final SharingService sharingService;
     private final BuildService buildService;
     private final MaterialTrackingService materialTracking;
+    private final BridgeService bridge;
     private MinecraftServer minecraftServer;
     private ConfigRegistry configRegistry;
     private ConfigStore configStore;
@@ -41,6 +42,7 @@ public class Context {
     private boolean quotaStarted;
     private boolean sharingStarted;
     private boolean materialsStarted;
+    private boolean bridgeStarted;
     private boolean buildStarted;
     private boolean debugStarted;
     private boolean managerStarted;
@@ -79,11 +81,14 @@ public class Context {
             buildService.setContext(this);
             materialTracking = new MaterialTrackingService();
             materialTracking.setContext(this);
+            bridge = new BridgeService();
+            bridge.setContext(this);
         } else {
             quota = null;
             sharingService = null;
             buildService = null;
             materialTracking = null;
+            bridge = null;
         }
         playerIdentifierProvider = new PlayerIdentifierProvider(this);
         debugService = new DebugService();
@@ -123,6 +128,11 @@ public class Context {
     /** Server side only; null on a client context. */
     public MaterialTrackingService getMaterialTracking() {
         return materialTracking;
+    }
+
+    /** Server side only; null on a client context. Works without Cytra Link (then only queues). */
+    public BridgeService getBridge() {
+        return bridge;
     }
 
     public BuildService getBuildService() {
@@ -234,6 +244,10 @@ public class Context {
                 materialTracking.startup();
                 materialsStarted = true;
             }
+            if (bridge != null) {
+                bridge.startup();
+                bridgeStarted = true;
+            }
             debugService.startup();
             debugStarted = true;
             synMan.startup();
@@ -320,6 +334,9 @@ public class Context {
             if (materialTracking != null) {
                 needsRewrite |= loadConfigurationForService(materialTracking, configuration, attemptToLoad);
             }
+            if (bridge != null) {
+                needsRewrite |= loadConfigurationForService(bridge, configuration, attemptToLoad);
+            }
         }
         needsRewrite |= loadConfigurationForService(debugService, configuration, attemptToLoad);
         loadedConfiguration = configuration;
@@ -329,6 +346,7 @@ public class Context {
             sharingService.registerConfigOptions(configRegistry);
             buildService.registerConfigOptions(configRegistry);
             materialTracking.registerConfigOptions(configRegistry);
+            bridge.registerConfigOptions(configRegistry);
             debugService.registerConfigOptions(configRegistry);
             configStore = new ConfigStore(getConfigFile().toPath(), configuration, configRegistry);
         } else {
@@ -416,6 +434,10 @@ public class Context {
         if (debugStarted) {
             stop(debugService::shutdown, startupFailure);
             debugStarted = false;
+        }
+        if (bridgeStarted) {
+            stop(bridge::shutdown, startupFailure);
+            bridgeStarted = false;
         }
         if (materialsStarted) {
             stop(materialTracking::shutdown, startupFailure);

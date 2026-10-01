@@ -59,6 +59,7 @@ public final class SyncmaticaCommand {
                 .then(loadArgument())
                 .then(configArgument())
                 .then(exportArgument())
+                .then(linkArgument())
                 .then(projectArgument());
         dispatcher.register(root);
     }
@@ -126,6 +127,32 @@ public final class SyncmaticaCommand {
                 reply.run();
             }
         });
+        return 1;
+    }
+
+    private static LiteralArgumentBuilder<ServerCommandSource> linkArgument() {
+        return CommandManager.literal("link").executes(SyncmaticaCommand::handleLink);
+    }
+
+    /** Hands the player a one-time code that the Discord bot's /link command claims through the bridge. */
+    private static int handleLink(final CommandContext<ServerCommandSource> context) {
+        final Context syncmaticaContext = Syncmatica.getContext(Syncmatica.SERVER_CONTEXT);
+        final Entity entity = context.getSource().getEntity();
+        if (!(entity instanceof ServerPlayerEntity player)) {
+            context.getSource().sendError(literal("Only a player can link an account"));
+            return 0;
+        }
+        if (syncmaticaContext == null || syncmaticaContext.getBridge() == null) {
+            context.getSource().sendError(literal("The Discord bridge is unavailable"));
+            return 0;
+        }
+        if (!syncmaticaContext.getBridge().isAvailable()) {
+            context.getSource().sendError(literal("Discord linking is off: Cytra Link is not installed on this server"));
+            return 0;
+        }
+        final String code = syncmaticaContext.getBridge().getLinkCodes().issue(
+                SyncmaticaUtil.getProfileId(player.getGameProfile()), SyncmaticaUtil.getProfileName(player.getGameProfile()));
+        sendPrivateFeedback(context, "Your Discord link code is " + code + " (valid 10 minutes). In Discord, run: /link " + code);
         return 1;
     }
 

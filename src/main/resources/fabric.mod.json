@@ -24,6 +24,9 @@
     ],
     "server": [
       "com.steelaspect.cytrasyncmatica.server.SyncmaticaServer"
+    ],
+    "cytra-link": [
+      "com.steelaspect.cytrasyncmatica.bridge.CytraLinkBridge"
     ]
   },
   "mixins": [

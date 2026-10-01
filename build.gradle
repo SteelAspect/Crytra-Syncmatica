@@ -52,6 +52,11 @@ dependencies {
     modImplementation "maven.modrinth:malilib:${project.malilib_version}"
     modLocalRuntime "me.fallenbreath:conditional-mixin-fabric:${project.conditional_mixin_version}"
 
+    // Cytra Link's public API (net.cytra.link.api) for the Discord bridge. Compile-time only:
+    // the bridge classes are registered through the "cytra-link" entrypoint and are only
+    // loaded when Cytra Link is installed on the server.
+    compileOnly files("libs/cytra-link-0.3.0.jar")
+
     // Bundled (jar-in-jar); LuckPerms-compatible permission checks with vanilla op-level fallback.
     include(modImplementation("me.lucko:fabric-permissions-api:${project.fabric_permissions_api_version}"))
 
