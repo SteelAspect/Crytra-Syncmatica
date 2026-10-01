@@ -1,0 +1,34 @@
+# Cytra-Syncmatica Discord bot. Copy to config.yaml next to .env and fill in the IDs.
+# Values written as ${NAME} are read from the environment / .env.
+
+discord:
+  token: ${DISCORD_TOKEN}
+  guild_id: 0                 # the Discord server the slash commands are registered in
+  feed_channel_id: 0          # where shared schematics, progress and completions are posted (0 = no feed)
+  staff_role_ids: []          # members with one of these roles may /unlink others and run /syncmatica refresh
+
+server:
+  name: "CMP"                 # shown in embeds
+  host: "cmp.example.com"     # the Minecraft server address (the game port, unless Cytra Link has its own port=)
+  port: 25565
+  secret: ${MOD_LINK_SECRET}  # secret= from the server's config/cytra-link.properties
+  timeout: 8.0                # seconds to wait for a reply
+
+syncmatica:
+  page_size: 15               # items per page in /schematic materials and the feed message
+  feed_edit: true             # edit one "materials" message per schematic in place instead of posting again
+  announce_item_completed: true
+  announce_schematic_completed: true
+  announce_schematic_shared: true
+
+linking:
+  enabled: true               # /link <code>, /unlink, /whoami (codes come from /cytra-syncmatica link in game)
+  # Optional: read Discord <-> Minecraft links from a cytra-bridge bot's database as a
+  # fallback (read-only), so players already linked there need not link again.
+  shared_db_path: ""
+
+database: "syncmatica-bot.sqlite3"
+
+logging:
+  level: INFO
+  file: "logs/bot.log"        # null disables file logging
