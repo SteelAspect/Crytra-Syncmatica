@@ -35,6 +35,7 @@ final class ServiceConfigRegistryTest {
             expected.put("quota.enabled", false);
             expected.put("quota.limit", 40_000_000);
             expected.put("sharing.max_schematic_megabytes", 64);
+            expected.put("sharing.hide_coordinates_without_permission", false);
             expected.put("materials.enabled", true);
             expected.put("materials.max_schematic_blocks", 8_000_000);
             expected.put("bridge.enabled", true);
@@ -58,7 +59,7 @@ final class ServiceConfigRegistryTest {
             }
 
             assertEquals(expected, actual);
-            assertEquals(15, actual.size());
+            assertEquals(16, actual.size());
             assertFalse(actual.containsKey("checkupdate"));
             assertFalse(actual.containsKey("check_pre_release"));
         } finally {

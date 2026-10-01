@@ -116,7 +116,10 @@ Errors: `no material list yet for <name>` (extraction still running),
 ```
 
 With coordinates hidden only `schematic_id`, `schematic`, `dimension` and
-`"coordinates_hidden":true` are present.
+`"coordinates_hidden":true` are present. Coordinates are hidden from the bot
+when `bridge.hide_coordinates` is on. (In game, `/cytra-syncmatica where
+<schematic>` shows the same data; there the `sharing.hide_coordinates_without_permission`
+option and the `cytra-syncmatica.where` permission decide, not `bridge.*`.)
 
 ### `material_action`
 

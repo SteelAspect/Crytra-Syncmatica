@@ -77,5 +77,44 @@ config, the UI, the lang files, the docs and the build:
 
 ### Added
 
-- `sharing` config section (`max_schematic_megabytes`).
+- `sharing` config section (`max_schematic_megabytes`,
+  `hide_coordinates_without_permission`).
 - A dedicated-server entrypoint that reports whether Cytra Link is present.
+- Own material tracking (Step 2): the server extracts the material list from
+  the shared schematic (Litematica's counting rules), keeps one shared
+  gathered count per item per schematic with "last edited by" history in
+  `<world>/cytra-syncmatica/materials/<id>.json`, and syncs it over the new
+  `material_list` / `material_update` / `material_request` / `material_edit`
+  packets (feature `MATERIAL_TRACKING`). Remaining counts are shown as
+  shulker boxes + stacks + items. `materials` config section (`enabled`,
+  `max_schematic_blocks`). Permissions `cytra-syncmatica.materials.edit`
+  (fallback allowed) and `cytra-syncmatica.materials.reset` (fallback op
+  level 2).
+- `/cytra-syncmatica export <schematic>` writes CSV + txt to
+  `config/cytra-syncmatica/exports/`.
+- Client material tracker with automatic mode detection (connected /
+  client-only / singleplayer; client-only and singleplayer keep counts in
+  `config/cytra-syncmatica/client/<server-or-world>/<schematic>.json` and
+  never use the network), inventory + open-container auto-count, material
+  screen (+1/+16/+64/Set/Done/Reset/Pin, hide completed, sort, Add from
+  inventory, Export), HUD overlay of pinned items (position/scale/rows),
+  hotkeys `openMaterialTracker` / `toggleMaterialHud`, "Team tracker" button
+  in Litematica's material list and a Materials button in its main menu.
+- Discord bridge through Cytra Link 0.3.0 (optional dependency, loaded only
+  when Cytra Link is installed): requests `ping`, `list_schematics`,
+  `get_schematic`, `get_materials`, `get_where`, `material_action`,
+  `link_claim`; events `schematic_shared` / `schematic_updated` /
+  `schematic_removed`, `list_created`, `item_changed` (batched),
+  `item_completed`, `schematic_completed`, `resync`; `bridge` config section
+  (`enabled`, `batch_seconds`, `queue_limit`, `hide_coordinates`); queue
+  while no bot is connected. See `docs/BRIDGE_PROTOCOL.md`. The mod opens no
+  sockets and holds no secrets.
+- `/cytra-syncmatica link` issues a one-time code for linking a Discord
+  account through the bot.
+- `/cytra-syncmatica where <schematic>` (Step 3.5): dimension, origin and
+  centre (click to copy), size, and distance from the player when in the same
+  dimension. With `sharing.hide_coordinates_without_permission` on, players
+  without `cytra-syncmatica.where` (fallback allowed) only see the dimension.
+- Standalone Discord bot in `bot/` (own application, config, SQLite):
+  `/link`, `/unlink`, `/whoami`, `/links`, `/schematic list|info|materials|where`,
+  `/materials`, live feed channel.

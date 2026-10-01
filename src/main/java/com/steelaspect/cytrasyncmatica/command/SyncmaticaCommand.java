@@ -59,6 +59,7 @@ public final class SyncmaticaCommand {
                 .then(loadArgument())
                 .then(configArgument())
                 .then(exportArgument())
+                .then(whereArgument())
                 .then(linkArgument())
                 .then(projectArgument());
         dispatcher.register(root);
@@ -128,6 +129,82 @@ public final class SyncmaticaCommand {
             }
         });
         return 1;
+    }
+
+    private static LiteralArgumentBuilder<ServerCommandSource> whereArgument() {
+        return CommandManager.literal("where")
+                .then(CommandManager.argument("schematic", greedyString())
+                        .suggests(SyncmaticaCommand::suggestPlacementNames)
+                        .executes(SyncmaticaCommand::handleWhere));
+    }
+
+    /** Dimension, origin, centre and (same dimension) distance; coordinates are clickable to copy. */
+    private static int handleWhere(final CommandContext<ServerCommandSource> context) {
+        final Context syncmaticaContext = Syncmatica.getContext(Syncmatica.SERVER_CONTEXT);
+        if (syncmaticaContext == null) {
+            context.getSource().sendError(literal("Cytra-Syncmatica server context unavailable"));
+            return 0;
+        }
+        final String name = context.getArgument("schematic", String.class);
+        final Optional<ServerPlacement> found = findPlacementByName(syncmaticaContext, name);
+        if (found.isEmpty()) {
+            context.getSource().sendError(literal("Unknown shared schematic: " + name));
+            return 0;
+        }
+        final ServerCommandSource source = context.getSource();
+        final boolean mayseeCoordinates = !syncmaticaContext.getSharingService().isHideCoordinatesWithoutPermission()
+                || Permissions.check(source, com.steelaspect.cytrasyncmatica.service.SharingService.WHERE_PERMISSION, true);
+        for (final net.minecraft.text.Text line : describeLocation(syncmaticaContext, found.get(), source, mayseeCoordinates)) {
+            source.sendFeedback(() -> line, false);
+        }
+        return 1;
+    }
+
+    static List<net.minecraft.text.Text> describeLocation(final Context syncmaticaContext, final ServerPlacement placement,
+                                                           final ServerCommandSource source, final boolean showCoordinates) {
+        final List<net.minecraft.text.Text> lines = new ArrayList<>();
+        final String dimension = placement.getDimension();
+        final BlockPos origin = placement.getPosition();
+        final com.steelaspect.cytrasyncmatica.materials.MaterialListExtractor.Stats stats =
+                syncmaticaContext.getMaterialTracking() == null
+                        ? com.steelaspect.cytrasyncmatica.materials.MaterialListExtractor.Stats.EMPTY
+                        : syncmaticaContext.getMaterialTracking().getStats(placement.getId());
+        final BlockPos centre = stats.volume() > 0
+                ? origin.add(stats.sizeX() / 2, stats.sizeY() / 2, stats.sizeZ() / 2)
+                : origin;
+        final net.minecraft.text.MutableText head = Text.literal(placement.getName()).formatted(net.minecraft.util.Formatting.GOLD)
+                .append(Text.literal(" in ").formatted(net.minecraft.util.Formatting.GRAY))
+                .append(Text.literal(dimension.replace("minecraft:", "")).formatted(net.minecraft.util.Formatting.AQUA));
+        lines.add(head);
+        if (showCoordinates) {
+            lines.add(Text.literal("  origin ").formatted(net.minecraft.util.Formatting.GRAY).append(copyable(origin)));
+            if (stats.volume() > 0) {
+                lines.add(Text.literal("  centre ").formatted(net.minecraft.util.Formatting.GRAY).append(copyable(centre))
+                        .append(Text.literal("  size " + stats.sizeX() + "×" + stats.sizeY() + "×" + stats.sizeZ())
+                                .formatted(net.minecraft.util.Formatting.DARK_GRAY)));
+            }
+        } else {
+            lines.add(Text.literal("  coordinates are hidden on this server").formatted(net.minecraft.util.Formatting.DARK_GRAY));
+        }
+        if (source.getEntity() instanceof ServerPlayerEntity player) {
+            final String playerDimension = player.getEntityWorld().getRegistryKey().getValue().toString();
+            if (playerDimension.equals(dimension)) {
+                final double distance = Math.sqrt(player.getBlockPos().getSquaredDistance(centre));
+                lines.add(Text.literal(String.format(java.util.Locale.ROOT, "  %.0f blocks away", distance))
+                        .formatted(net.minecraft.util.Formatting.GREEN));
+            } else {
+                lines.add(Text.literal("  you are in another dimension").formatted(net.minecraft.util.Formatting.DARK_GRAY));
+            }
+        }
+        return lines;
+    }
+
+    private static net.minecraft.text.Text copyable(final BlockPos pos) {
+        final String text = pos.getX() + " " + pos.getY() + " " + pos.getZ();
+        return Text.literal(text).styled(style -> style
+                .withColor(net.minecraft.util.Formatting.YELLOW)
+                .withClickEvent(new net.minecraft.text.ClickEvent.CopyToClipboard(text))
+                .withHoverEvent(new net.minecraft.text.HoverEvent.ShowText(Text.literal("Click to copy " + text))));
     }
 
     private static LiteralArgumentBuilder<ServerCommandSource> linkArgument() {

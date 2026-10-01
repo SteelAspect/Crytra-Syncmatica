@@ -12,7 +12,17 @@ public class SharingService extends AbstractService {
     public static final int MIN_SCHEMATIC_MEGABYTES = 1;
     public static final int MAX_SCHEMATIC_MEGABYTES_LIMIT = 64;
 
+    public static final boolean HIDE_COORDINATES_WITHOUT_PERMISSION_DEFAULT = false;
+    /** {@code /cytra-syncmatica where}; fallback: allowed for everyone. */
+    public static final String WHERE_PERMISSION = "cytra-syncmatica.where";
+
     private int maxSchematicMegabytes = MAX_SCHEMATIC_MEGABYTES_DEFAULT;
+    private boolean hideCoordinatesWithoutPermission = HIDE_COORDINATES_WITHOUT_PERMISSION_DEFAULT;
+
+    /** When on, players lacking {@link #WHERE_PERMISSION} see dimension and distance only. */
+    public boolean isHideCoordinatesWithoutPermission() {
+        return hideCoordinatesWithoutPermission;
+    }
 
     public long getMaxSchematicBytes() {
         return Math.min(ProtocolLimits.DEFAULT_MAX_SCHEMATIC_BYTES, maxSchematicMegabytes * 1024L * 1024L);
@@ -33,6 +43,7 @@ public class SharingService extends AbstractService {
     @Override
     public void configure(final IServiceConfiguration configuration) {
         configuration.loadInteger("max_schematic_megabytes", this::setMaxSchematicMegabytes);
+        configuration.loadBoolean("hide_coordinates_without_permission", v -> hideCoordinatesWithoutPermission = v);
     }
 
     public void registerConfigOptions(final ConfigRegistry registry) {
@@ -40,6 +51,9 @@ public class SharingService extends AbstractService {
                 getConfigKey(), "max_schematic_megabytes", MAX_SCHEMATIC_MEGABYTES_DEFAULT,
                 MIN_SCHEMATIC_MEGABYTES, MAX_SCHEMATIC_MEGABYTES_LIMIT,
                 () -> maxSchematicMegabytes, this::setMaxSchematicMegabytes));
+        registry.add(ConfigOption.bool(getConfigKey(), "hide_coordinates_without_permission",
+                HIDE_COORDINATES_WITHOUT_PERMISSION_DEFAULT, () -> hideCoordinatesWithoutPermission,
+                v -> hideCoordinatesWithoutPermission = v));
     }
 
     private void setMaxSchematicMegabytes(final int value) {
