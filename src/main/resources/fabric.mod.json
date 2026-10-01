@@ -1,0 +1,57 @@
+{
+  "schemaVersion": 1,
+  "id": "cytra-syncmatica",
+  "version": "${version}",
+  "name": "Cytra-Syncmatica",
+  "description": "Shared Litematica schematics with team material tracking, build management and an optional Discord bridge through Cytra Link. Fork of Syncmatica Revolution.",
+  "authors": [
+    "steelaspect"
+  ],
+  "contributors": [
+    "Syncmatica Revolution authors (upstream, CC0)"
+  ],
+  "contact": {
+    "sources": "https://github.com/SteelAspect/Crytra-Syncmatica"
+  },
+  "license": "CC0-1.0",
+  "environment": "*",
+  "entrypoints": {
+    "main": [
+      "com.steelaspect.cytrasyncmatica.SyncmaticaFabric"
+    ],
+    "client": [
+      "com.steelaspect.cytrasyncmatica.client.SyncmaticaClient"
+    ],
+    "server": [
+      "com.steelaspect.cytrasyncmatica.server.SyncmaticaServer"
+    ]
+  },
+  "mixins": [
+    "cytra-syncmatica.mixin.json",
+    {
+      "config": "cytra-syncmatica.litematica_mixin.json",
+      "environment": "client"
+    }
+  ],
+  "depends": {
+    "fabricloader": ">=0.16.0",
+    "minecraft": "~1.21.11",
+    "fabric-api": "*",
+    "java": ">=21"
+  },
+  "recommends": {
+    "litematica": "*",
+    "malilib": "*"
+  },
+  "suggests": {
+    "cytra-link": ">=0.3.0"
+  },
+  "breaks": {
+    "syncmatica_r": "*",
+    "syncmatica": "*"
+  },
+  "custom": {
+    "cytra-syncmatica:client_requires": "Litematica and MaLiLib are required on the client; the dedicated server needs only Fabric API."
+  },
+  "icon": "assets/cytra-syncmatica/icon/logo.png"
+}

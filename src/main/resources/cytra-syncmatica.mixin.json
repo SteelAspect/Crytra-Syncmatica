@@ -1,0 +1,20 @@
+{
+  "required": true,
+  "minVersion": "0.8",
+  "package": "com.steelaspect.cytrasyncmatica.mixin",
+  "compatibilityLevel": "JAVA_21",
+  "mixins": [
+    "MixinCustomPayloadC2SPacket",
+    "MixinMinecraftServer",
+    "MixinServerPlayNetworkHandler",
+    "MixinServerWorld"
+  ],
+  "client": [
+    "MixinClientPlayNetworkHandler",
+    "MixinMinecraftClient"
+  ],
+  "server": [],
+  "injectors": {
+    "defaultRequire": 1
+  }
+}

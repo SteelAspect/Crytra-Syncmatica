@@ -1,0 +1,24 @@
+{
+  "required": true,
+  "minVersion": "0.8",
+  "package": "com.steelaspect.cytrasyncmatica.litematica_mixin",
+  "compatibilityLevel": "JAVA_21",
+  "mixins": [],
+  "client": [
+    "MixinGuiMainMenu",
+    "MixinWidgetListSchematicPlacement",
+    "MixinSchematicPlacement",
+    "MixinWidgetSchematicPlacement",
+    "MixinWidgetSchematicPlacementButtonListener",
+    "MixinGuiBase",
+    "MixinSchematicHolder",
+    "MixinButtonBase",
+    "MixinGuiPlacementConfiguration",
+    "MixinSubregionPlacement",
+    "MixinSchematicPlacementManager"
+  ],
+  "server": [],
+  "injectors": {
+    "defaultRequire": 1
+  }
+}

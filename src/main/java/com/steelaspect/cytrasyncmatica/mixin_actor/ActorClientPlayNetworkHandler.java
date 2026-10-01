@@ -1,0 +1,94 @@
+package com.steelaspect.cytrasyncmatica.mixin_actor;
+
+import com.steelaspect.cytrasyncmatica.IFileStorage;
+import com.steelaspect.cytrasyncmatica.RedirectFileStorage;
+import com.steelaspect.cytrasyncmatica.SyncmaticManager;
+import com.steelaspect.cytrasyncmatica.Syncmatica;
+import com.steelaspect.cytrasyncmatica.client.network.ClientCommunicationManager;
+import com.steelaspect.cytrasyncmatica.communication.CommunicationManager;
+import com.steelaspect.cytrasyncmatica.client.network.ClientExchangeTarget;
+import com.steelaspect.cytrasyncmatica.communication.ExchangeTarget;
+import com.steelaspect.cytrasyncmatica.litematica.ClaimedRegionVisibility;
+import com.steelaspect.cytrasyncmatica.litematica.LitematicManager;
+import com.steelaspect.cytrasyncmatica.litematica.ScreenHelper;
+import net.minecraft.client.network.ClientPlayNetworkHandler;
+import net.minecraft.network.PacketByteBuf;
+import com.steelaspect.cytrasyncmatica.communication.SyncmaticaPayload;
+import net.minecraft.network.packet.CustomPayload;
+import net.minecraft.util.Identifier;
+import org.spongepowered.asm.mixin.injection.callback.CallbackInfo;
+
+public class ActorClientPlayNetworkHandler {
+
+    private static ActorClientPlayNetworkHandler instance;
+    private static ClientPlayNetworkHandler clientPlayNetworkHandler;
+    private CommunicationManager clientCommunication;
+    private ExchangeTarget exTarget;
+
+    public static ActorClientPlayNetworkHandler getInstance() {
+        if (instance == null) {
+
+            instance = new ActorClientPlayNetworkHandler();
+        }
+
+        return instance;
+    }
+
+    private static void setClientPlayNetworkHandler(final ClientPlayNetworkHandler clientPlayNetworkHandler) {
+        ActorClientPlayNetworkHandler.clientPlayNetworkHandler = clientPlayNetworkHandler;
+    }
+
+    public void startEvent(final ClientPlayNetworkHandler clientPlayNetworkHandler) {
+        setClientPlayNetworkHandler(clientPlayNetworkHandler);
+        startClient();
+    }
+
+    public void startClient() {
+        if (clientPlayNetworkHandler == null) {
+            throw new RuntimeException("Tried to start client before receiving a connection");
+        }
+        final IFileStorage data = new RedirectFileStorage();
+        final SyncmaticManager man = new SyncmaticManager();
+        exTarget = new ClientExchangeTarget(clientPlayNetworkHandler);
+        final CommunicationManager comms = new ClientCommunicationManager(exTarget);
+        Syncmatica.initClient(comms, data, man);
+        clientCommunication = comms;
+        ScreenHelper.init();
+        LitematicManager.getInstance().setActiveContext(Syncmatica.getContext(Syncmatica.CLIENT_CONTEXT));
+        ClaimedRegionVisibility.getInstance().bindToClientContext(Syncmatica.getContext(Syncmatica.CLIENT_CONTEXT));
+    }
+
+    public void packetEvent(final ClientPlayNetworkHandler clientPlayNetworkHandler,
+            final CustomPayload packet,
+            final CallbackInfo ci) {
+        if (!(packet instanceof SyncmaticaPayload payload)) {
+            return;
+        }
+        final Identifier id = payload.id();
+        final PacketByteBuf buf = payload.asPacketByteBuf();
+        if (clientCommunication == null) {
+
+            ActorClientPlayNetworkHandler.getInstance().startEvent(clientPlayNetworkHandler);
+        }
+        if (packetEvent(id, buf)) {
+
+            ci.cancel();
+        }
+    }
+
+    public boolean packetEvent(final Identifier id, final PacketByteBuf buf) {
+        if (clientCommunication.handlePacket(id)) {
+            clientCommunication.onPacket(exTarget, id, buf);
+
+            return true;
+        }
+
+        return false;
+    }
+
+    public void reset() {
+        clientCommunication = null;
+        exTarget = null;
+        clientPlayNetworkHandler = null;
+    }
+}

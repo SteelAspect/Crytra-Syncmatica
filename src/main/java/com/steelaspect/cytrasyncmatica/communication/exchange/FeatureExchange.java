@@ -1,0 +1,52 @@
+package com.steelaspect.cytrasyncmatica.communication.exchange;
+
+import com.steelaspect.cytrasyncmatica.Context;
+import com.steelaspect.cytrasyncmatica.communication.ExchangeTarget;
+import com.steelaspect.cytrasyncmatica.communication.FeatureSet;
+import com.steelaspect.cytrasyncmatica.communication.PacketType;
+import com.steelaspect.cytrasyncmatica.communication.ProtocolLimits;
+import com.steelaspect.cytrasyncmatica.communication.exchange.AbstractExchange;
+import io.netty.buffer.Unpooled;
+import net.minecraft.network.PacketByteBuf;
+import net.minecraft.util.Identifier;
+
+public abstract class FeatureExchange extends AbstractExchange {
+
+    protected FeatureExchange(final ExchangeTarget partner, final Context con) {
+        super(partner, con);
+    }
+
+    @Override
+    public boolean checkPacket(final Identifier id, final PacketByteBuf packetBuf) {
+        final PacketType type = PacketType.fromIdentifier(id);
+        return type == PacketType.FEATURE_REQUEST
+                || type == PacketType.FEATURE;
+    }
+
+    @Override
+    public void handle(final Identifier id, final PacketByteBuf packetBuf) {
+        final PacketType type = PacketType.fromIdentifier(id);
+        if (type == PacketType.FEATURE_REQUEST) {
+            sendFeatures();
+        } else if (type == PacketType.FEATURE) {
+            final FeatureSet fs = FeatureSet.fromString(packetBuf.readString(ProtocolLimits.MAX_FEATURE_STRING_LENGTH));
+            getPartner().setFeatureSet(fs);
+            onFeatureSetReceive();
+        }
+    }
+
+    protected void onFeatureSetReceive() {
+        succeed();
+    }
+
+    public void requestFeatureSet() {
+        getPartner().sendPacket(PacketType.FEATURE_REQUEST.toIdentifier(getPartner().getProtocolFlavor()), new PacketByteBuf(Unpooled.buffer()), getContext());
+    }
+
+    private void sendFeatures() {
+        final PacketByteBuf buf = new PacketByteBuf(Unpooled.buffer());
+        final FeatureSet fs = getContext().getFeatureSet();
+        buf.writeString(fs.toString(), ProtocolLimits.MAX_FEATURE_STRING_LENGTH);
+        getPartner().sendPacket(PacketType.FEATURE.toIdentifier(getPartner().getProtocolFlavor()), buf, getContext());
+    }
+}

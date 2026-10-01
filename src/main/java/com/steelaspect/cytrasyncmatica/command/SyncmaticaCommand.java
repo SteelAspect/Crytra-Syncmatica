@@ -1,0 +1,468 @@
+package com.steelaspect.cytrasyncmatica.command;
+
+import com.steelaspect.cytrasyncmatica.Context;
+import com.steelaspect.cytrasyncmatica.ServerPlacement;
+import com.steelaspect.cytrasyncmatica.Syncmatica;
+import com.steelaspect.cytrasyncmatica.communication.PlacementAccessPolicy;
+import com.steelaspect.cytrasyncmatica.communication.ServerCommunicationManager;
+import com.steelaspect.cytrasyncmatica.extended_core.PlayerIdentifier;
+import com.steelaspect.cytrasyncmatica.schematic.SchematicPeek;
+import com.steelaspect.cytrasyncmatica.schematic.SchematicPeeker;
+import com.steelaspect.cytrasyncmatica.service.ConfigOption;
+import com.steelaspect.cytrasyncmatica.service.ConfigRegistry;
+import com.steelaspect.cytrasyncmatica.util.SyncmaticaUtil;
+import com.mojang.brigadier.CommandDispatcher;
+import com.mojang.brigadier.LiteralMessage;
+import com.mojang.brigadier.builder.LiteralArgumentBuilder;
+import com.mojang.brigadier.builder.RequiredArgumentBuilder;
+import com.mojang.brigadier.context.CommandContext;
+import com.mojang.brigadier.suggestion.Suggestions;
+import com.mojang.brigadier.suggestion.SuggestionsBuilder;
+import me.lucko.fabric.api.permissions.v0.Permissions;
+import net.minecraft.entity.Entity;
+import net.minecraft.server.command.CommandManager;
+import net.minecraft.server.command.ServerCommandSource;
+import net.minecraft.server.network.ServerPlayerEntity;
+import net.minecraft.text.Text;
+import net.minecraft.util.BlockMirror;
+import net.minecraft.util.BlockRotation;
+import net.minecraft.util.math.BlockPos;
+
+import java.io.File;
+import java.io.FileInputStream;
+import java.io.IOException;
+import java.nio.file.Files;
+import java.util.ArrayList;
+import java.util.Collection;
+import java.util.Collections;
+import java.util.HashMap;
+import java.util.List;
+import java.util.Map;
+import java.util.Optional;
+import java.util.UUID;
+import java.util.concurrent.CompletableFuture;
+
+import static com.mojang.brigadier.arguments.StringArgumentType.string;
+import static com.mojang.brigadier.arguments.StringArgumentType.greedyString;
+
+public final class SyncmaticaCommand {
+    private static final String LOAD_PERMISSION = "cytra-syncmatica.command.load";
+    private static final String CONFIG_PERMISSION = "cytra-syncmatica.config";
+    private static final String LITEMATIC_EXTENSION = ".litematic";
+    private static final Map<String, CachedPeek> PEEK_CACHE = new HashMap<>();
+
+    private SyncmaticaCommand() {
+    }
+
+    public static void register(final CommandDispatcher<ServerCommandSource> dispatcher) {
+        final LiteralArgumentBuilder<ServerCommandSource> root = CommandManager.literal("cytra-syncmatica")
+                .then(loadArgument())
+                .then(configArgument())
+                .then(projectArgument());
+        dispatcher.register(root);
+    }
+
+    private static LiteralArgumentBuilder<ServerCommandSource> configArgument() {
+        return CommandManager.literal("config")
+                .requires(SyncmaticaCommand::hasConfigPermission)
+                .then(CommandManager.literal("list")
+                        .executes(context -> handleConfigList(context, null))
+                        .then(CommandManager.argument("section", string())
+                                .suggests(SyncmaticaCommand::suggestConfigSections)
+                                .executes(context -> handleConfigList(
+                                        context, context.getArgument("section", String.class)))))
+                .then(configReadArgument("get", SyncmaticaCommand::handleConfigGet))
+                .then(configReadArgument("reset", SyncmaticaCommand::handleConfigReset))
+                .then(CommandManager.literal("set")
+                        .then(CommandManager.argument("section", string())
+                                .suggests(SyncmaticaCommand::suggestConfigSections)
+                                .then(CommandManager.argument("key", string())
+                                        .suggests(SyncmaticaCommand::suggestConfigKeys)
+                                        .then(CommandManager.argument("value", string())
+                                                .suggests(SyncmaticaCommand::suggestConfigValues)
+                                                .executes(SyncmaticaCommand::handleConfigSet)))));
+    }
+
+    private static LiteralArgumentBuilder<ServerCommandSource> configReadArgument(
+            final String operation,
+            final com.mojang.brigadier.Command<ServerCommandSource> handler
+    ) {
+        return CommandManager.literal(operation)
+                .then(CommandManager.argument("section", string())
+                        .suggests(SyncmaticaCommand::suggestConfigSections)
+                        .then(CommandManager.argument("key", string())
+                                .suggests(SyncmaticaCommand::suggestConfigKeys)
+                                .executes(handler)));
+    }
+
+    private static CompletableFuture<Suggestions> suggestConfigSections(
+            final CommandContext<ServerCommandSource> context,
+            final SuggestionsBuilder builder
+    ) {
+        final ConfigRegistry registry = configRegistry();
+        if (registry != null) {
+            registry.sections().forEach(builder::suggest);
+        }
+        return builder.buildFuture();
+    }
+
+    private static CompletableFuture<Suggestions> suggestConfigKeys(
+            final CommandContext<ServerCommandSource> context,
+            final SuggestionsBuilder builder
+    ) {
+        final ConfigRegistry registry = configRegistry();
+        if (registry != null) {
+            registry.keys(context.getArgument("section", String.class)).forEach(builder::suggest);
+        }
+        return builder.buildFuture();
+    }
+
+    private static CompletableFuture<Suggestions> suggestConfigValues(
+            final CommandContext<ServerCommandSource> context,
+            final SuggestionsBuilder builder
+    ) {
+        final ConfigRegistry registry = configRegistry();
+        if (registry == null) {
+            return builder.buildFuture();
+        }
+        final ConfigOption<?> option = registry.find(
+                context.getArgument("section", String.class),
+                context.getArgument("key", String.class)
+        );
+        if (option != null && option.getDefaultValue() instanceof Boolean) {
+            builder.suggest("true");
+            builder.suggest("false");
+        }
+        return builder.buildFuture();
+    }
+
+    private static ConfigRegistry configRegistry() {
+        final Context context = Syncmatica.getContext(Syncmatica.SERVER_CONTEXT);
+        return context == null ? null : context.getConfigRegistry();
+    }
+
+    private static ConfigCommandLogic configLogic() {
+        final Context context = Syncmatica.getContext(Syncmatica.SERVER_CONTEXT);
+        if (context == null || context.getConfigRegistry() == null || context.getConfigStore() == null) {
+            throw new IllegalStateException("Cytra-Syncmatica server configuration unavailable");
+        }
+        return new ConfigCommandLogic(context.getConfigRegistry(), context.getConfigStore());
+    }
+
+    private static int handleConfigList(
+            final CommandContext<ServerCommandSource> context,
+            final String section
+    ) {
+        try {
+            final List<String> entries = configLogic().list(section);
+            entries.forEach(entry -> sendPrivateFeedback(context, entry));
+            return entries.isEmpty() ? 0 : 1;
+        } catch (final IllegalArgumentException | IllegalStateException exception) {
+            context.getSource().sendError(literal(exception.getMessage()));
+            return 0;
+        }
+    }
+
+    private static int handleConfigGet(final CommandContext<ServerCommandSource> context) {
+        try {
+            sendPrivateFeedback(context, configLogic().get(
+                    context.getArgument("section", String.class),
+                    context.getArgument("key", String.class)
+            ));
+            return 1;
+        } catch (final IllegalArgumentException | IllegalStateException exception) {
+            context.getSource().sendError(literal(exception.getMessage()));
+            return 0;
+        }
+    }
+
+    private static int handleConfigSet(final CommandContext<ServerCommandSource> context) {
+        try {
+            sendPrivateFeedback(context, configLogic().set(
+                    context.getArgument("section", String.class),
+                    context.getArgument("key", String.class),
+                    context.getArgument("value", String.class)
+            ));
+            return 1;
+        } catch (final IOException | IllegalArgumentException | IllegalStateException exception) {
+            context.getSource().sendError(literal("Failed to update configuration: " + exception.getMessage()));
+            return 0;
+        }
+    }
+
+    private static int handleConfigReset(final CommandContext<ServerCommandSource> context) {
+        try {
+            sendPrivateFeedback(context, configLogic().reset(
+                    context.getArgument("section", String.class),
+                    context.getArgument("key", String.class)
+            ));
+            return 1;
+        } catch (final IOException | IllegalArgumentException | IllegalStateException exception) {
+            context.getSource().sendError(literal("Failed to reset configuration: " + exception.getMessage()));
+            return 0;
+        }
+    }
+
+    private static LiteralArgumentBuilder<ServerCommandSource> loadArgument() {
+        return CommandManager.literal("load")
+                .requires(SyncmaticaCommand::hasLoadPermission)
+                .executes(SyncmaticaCommand::handleLoadAll)
+                .then(CommandManager.argument("file", string())
+                        .suggests(SyncmaticaCommand::suggestOrphanFiles)
+                        .executes(SyncmaticaCommand::handleLoadSingle));
+    }
+
+    private static CompletableFuture<Suggestions> suggestOrphanFiles(final CommandContext<ServerCommandSource> context,
+                                                                     final SuggestionsBuilder builder) {
+        final Context syncmaticaContext = Syncmatica.getContext(Syncmatica.SERVER_CONTEXT);
+        if (syncmaticaContext != null) {
+            for (final File file : listOrphanCandidates(syncmaticaContext)) {
+                final String base = removeLitematicExtension(file.getName());
+                final SchematicPeek peek = peekCached(file);
+                if (peek != null && peek.hasName()) {
+                    builder.suggest(base, new LiteralMessage(peek.getName()));
+                } else {
+                    builder.suggest(base);
+                }
+            }
+        }
+        return builder.buildFuture();
+    }
+
+    private static int handleLoadAll(final CommandContext<ServerCommandSource> context) {
+        final Context syncmaticaContext = Syncmatica.getContext(Syncmatica.SERVER_CONTEXT);
+        if (syncmaticaContext == null) {
+            context.getSource().sendError(literal("Cytra-Syncmatica server context unavailable"));
+            return 0;
+        }
+        final List<File> candidates = listOrphanCandidates(syncmaticaContext);
+        if (candidates.isEmpty()) {
+            sendFeedback(context, "No syncmatic file(s) found that need to be loaded");
+            return 0;
+        }
+        int loaded = 0;
+        for (final File file : candidates) {
+            if (loadOrphanFile(context, syncmaticaContext, file)) {
+                loaded++;
+            }
+        }
+        sendFeedback(context, loaded + " syncmatic file(s) loaded");
+        return loaded > 0 ? 1 : 0;
+    }
+
+    private static int handleLoadSingle(final CommandContext<ServerCommandSource> context) {
+        final Context syncmaticaContext = Syncmatica.getContext(Syncmatica.SERVER_CONTEXT);
+        if (syncmaticaContext == null) {
+            context.getSource().sendError(literal("Cytra-Syncmatica server context unavailable"));
+            return 0;
+        }
+        String name = context.getArgument("file", String.class);
+        if (name.endsWith(LITEMATIC_EXTENSION)) {
+            name = removeLitematicExtension(name);
+        }
+        if (name.isEmpty() || !SyncmaticaUtil.sanitizeFileName(name).equals(name)) {
+            context.getSource().sendError(literal("Invalid syncmatic file name: " + name));
+            return 0;
+        }
+        final File file = new File(syncmaticaContext.getLitematicFolder(), name + LITEMATIC_EXTENSION);
+        if (!file.isFile()) {
+            context.getSource().sendError(literal("Syncmatic file not found: " + name + LITEMATIC_EXTENSION));
+            return 0;
+        }
+        return loadOrphanFile(context, syncmaticaContext, file) ? 1 : 0;
+    }
+
+    /**
+     * Registers a litematic file from the server folder as a shared placement.
+     * The file is stored under its content hash so later downloads resolve;
+     * files that already back a registered placement are skipped.
+     */
+    private static boolean loadOrphanFile(final CommandContext<ServerCommandSource> context,
+                                          final Context syncmaticaContext,
+                                          final File file) {
+        final UUID hash;
+        try (FileInputStream input = new FileInputStream(file)) {
+            hash = SyncmaticaUtil.createChecksum(input);
+        } catch (final Exception exception) {
+            context.getSource().sendError(literal("Failed to read syncmatic file: " + file.getName()));
+            return false;
+        }
+        if (hasPlacementHash(syncmaticaContext, hash)) {
+            sendFeedback(context, "Skipping " + file.getName() + ": already registered");
+            return false;
+        }
+
+        final File storedFile = new File(syncmaticaContext.getLitematicFolder(), hash + LITEMATIC_EXTENSION);
+        if (!file.equals(storedFile) && !storedFile.exists()) {
+            try {
+                Files.move(file.toPath(), storedFile.toPath());
+            } catch (final Exception exception) {
+                context.getSource().sendError(literal("Failed to store syncmatic file: " + file.getName()));
+                return false;
+            }
+        }
+
+        final ServerCommandSource source = context.getSource();
+        final Entity entity = source.getEntity();
+        final ServerPlayerEntity player = entity instanceof ServerPlayerEntity ? (ServerPlayerEntity) entity : null;
+        final PlayerIdentifier owner = player != null
+                ? syncmaticaContext.getPlayerIdentifierProvider().createOrGet(player.getGameProfile())
+                : PlayerIdentifier.MISSING_PLAYER;
+
+        final ServerPlacement placement = new ServerPlacement(
+                UUID.randomUUID(),
+                removeLitematicExtension(file.getName()),
+                hash,
+                owner
+        );
+        final String dimension = source.getWorld().getRegistryKey().getValue().toString();
+        final BlockPos position = player != null ? player.getBlockPos() : BlockPos.ORIGIN;
+        placement.move(dimension, position, BlockRotation.NONE, BlockMirror.NONE);
+
+        final ServerCommunicationManager comms =
+                (ServerCommunicationManager) syncmaticaContext.getCommunicationManager();
+        if (!comms.registerNewPlacement(placement)) {
+            context.getSource().sendError(literal("Failed to register placement for " + file.getName()));
+            return false;
+        }
+        sendFeedback(context, "Loaded server placement '" + placement.getName() + "'");
+        return true;
+    }
+
+    private static List<File> listOrphanCandidates(final Context syncmaticaContext) {
+        final File[] files = syncmaticaContext.getLitematicFolder()
+                .listFiles((dir, name) -> name.endsWith(LITEMATIC_EXTENSION));
+        if (files == null) {
+            return Collections.emptyList();
+        }
+        final List<File> candidates = new ArrayList<>();
+        for (final File file : files) {
+            if (file.isFile() && !isRegisteredByName(syncmaticaContext, file)) {
+                candidates.add(file);
+            }
+        }
+        return candidates;
+    }
+
+    private static boolean isRegisteredByName(final Context syncmaticaContext, final File file) {
+        try {
+            final UUID hash = UUID.fromString(removeLitematicExtension(file.getName()));
+            return hasPlacementHash(syncmaticaContext, hash);
+        } catch (final IllegalArgumentException notAHashName) {
+            return false;
+        }
+    }
+
+    private static boolean hasPlacementHash(final Context syncmaticaContext, final UUID hash) {
+        return syncmaticaContext.getSyncmaticManager().getAll().stream()
+                .anyMatch(placement -> hash.equals(placement.getHash()));
+    }
+
+    private static String removeLitematicExtension(final String fileName) {
+        return fileName.endsWith(LITEMATIC_EXTENSION)
+                ? fileName.substring(0, fileName.length() - LITEMATIC_EXTENSION.length())
+                : fileName;
+    }
+
+    private static SchematicPeek peekCached(final File file) {
+        final String key = file.getAbsolutePath();
+        final CachedPeek cached = PEEK_CACHE.get(key);
+        if (cached != null && cached.lastModified == file.lastModified() && cached.length == file.length()) {
+            return cached.peek;
+        }
+        final SchematicPeek peek = SchematicPeeker.peek(file);
+        PEEK_CACHE.put(key, new CachedPeek(file.lastModified(), file.length(), peek));
+        if (PEEK_CACHE.size() > 1024) {
+            PEEK_CACHE.clear();
+        }
+        return peek;
+    }
+
+    private static void sendFeedback(final CommandContext<ServerCommandSource> context, final String message) {
+        context.getSource().sendFeedback(() -> literal(message), true);
+    }
+
+    private static void sendPrivateFeedback(
+            final CommandContext<ServerCommandSource> context,
+            final String message
+    ) {
+        context.getSource().sendFeedback(() -> literal(message), false);
+    }
+
+    private static final class CachedPeek {
+        private final long lastModified;
+        private final long length;
+        private final SchematicPeek peek;
+
+        private CachedPeek(final long lastModified, final long length, final SchematicPeek peek) {
+            this.lastModified = lastModified;
+            this.length = length;
+            this.peek = peek;
+        }
+    }
+
+    private static RequiredArgumentBuilder<ServerCommandSource, String> projectArgument() {
+        return CommandManager.argument("project_name", string())
+                .suggests((context, builder) -> {
+                    final Context syncmaticaContext = Syncmatica.getContext(Syncmatica.SERVER_CONTEXT);
+                    if (syncmaticaContext != null) {
+                        syncmaticaContext.getSyncmaticManager().getAll().stream()
+                                .map(ServerPlacement::getName)
+                                .forEach(builder::suggest);
+                    }
+                    return builder.buildFuture();
+                })
+                .then(CommandManager.literal("rescanBuild")
+                        .requires(SyncmaticaCommand::hasCommandPermission)
+                        .executes(SyncmaticaCommand::handleRescanBuild));
+    }
+
+    /**
+     * Build progress is counted per chunk column and kept, on the grounds that a
+     * block cannot change while its chunk is unloaded. Editing the world outside
+     * the game breaks that assumption, and this throws the counts away so they
+     * are taken again from what is actually there.
+     */
+    private static int handleRescanBuild(final CommandContext<ServerCommandSource> context) {
+        final Context syncmaticaContext = Syncmatica.getContext(Syncmatica.SERVER_CONTEXT);
+        if (syncmaticaContext == null || syncmaticaContext.getBuildService() == null) {
+            context.getSource().sendError(literal("Cytra-Syncmatica build service unavailable"));
+            return 0;
+        }
+        final String projectName = context.getArgument("project_name", String.class);
+        final Optional<ServerPlacement> placement = syncmaticaContext.getSyncmaticManager().getAll().stream()
+                .filter(candidate -> candidate.getName().equals(projectName))
+                .findFirst();
+        if (!placement.isPresent()) {
+            context.getSource().sendError(literal("Unknown Cytra-Syncmatica project: " + projectName));
+            return 0;
+        }
+        if (!syncmaticaContext.getBuildService().rescan(placement.get())) {
+            context.getSource().sendError(literal("Build completion tracking is disabled"));
+            return 0;
+        }
+        sendFeedback(context, "Build progress of '" + projectName + "' will be measured again");
+        return 1;
+    }
+
+    private static boolean hasCommandPermission(final ServerCommandSource source) {
+        return Permissions.check(
+                source,
+                PlacementAccessPolicy.COMMAND_PERMISSION,
+                PlacementAccessPolicy.COMMAND_PERMISSION_LEVEL
+        );
+    }
+
+    private static boolean hasLoadPermission(final ServerCommandSource source) {
+        return hasCommandPermission(source)
+                && Permissions.check(source, LOAD_PERMISSION, PlacementAccessPolicy.COMMAND_PERMISSION_LEVEL);
+    }
+
+    private static boolean hasConfigPermission(final ServerCommandSource source) {
+        return Permissions.check(source, CONFIG_PERMISSION, PlacementAccessPolicy.COMMAND_PERMISSION_LEVEL);
+    }
+
+    private static net.minecraft.text.Text literal(final String message) {
+        return Text.literal(message);
+    }
+}
