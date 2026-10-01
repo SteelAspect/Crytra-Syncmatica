@@ -101,6 +101,25 @@ def groups_embed(target_name: str, server_name: str, summary: dict, groups: list
     return e
 
 
+def layers_embed(out: dict, server_name: str) -> discord.Embed:
+    b = out.get("build") or {}
+    layers = list(out.get("layers") or [])
+    e = discord.Embed(title=f"Layers: {out.get('schematic', '?')}", colour=Palette.OK if b.get("complete") else Palette.INFO)
+    e.set_author(name=server_name)
+    if not out.get("scanned"):
+        e.description = "The server has not measured this build yet (its chunks may not be loaded)."
+        return e
+    e.description = (f"{progress_bar(b.get('percent', 0.0))} **{b.get('percent', 0.0):.1f}%** built · "
+                     f"{b.get('placed', 0):,} / {b.get('required', 0):,} blocks · "
+                     f"{out.get('layers_complete', 0)} of {out.get('layers_total', len(layers))} layers done")
+    shown = layers if len(layers) <= 24 else [l for l in layers if not l.get("complete")][:24]
+    lines = [f"{'✅' if l.get('complete') else '▫️'} **Y {l['y']}** {progress_bar(l.get('percent', 0.0), 10)} {l.get('percent', 0.0):.0f}% · {l['placed']:,}/{l['expected']:,}"
+             for l in reversed(shown)]
+    name = "Layers (top first)" if len(layers) <= 24 else f"Incomplete layers (first {len(shown)} of {len(layers) - out.get('layers_complete', 0)})"
+    e.add_field(name=name, value="\n".join(lines)[:1024] if lines else "every layer is complete", inline=False)
+    return e
+
+
 def project_line(p: dict) -> str:
     m = p.get("materials") or {}
     pct = f"{m['percent']:.0f}%" if m.get("available") and m.get("items") else "no materials yet"

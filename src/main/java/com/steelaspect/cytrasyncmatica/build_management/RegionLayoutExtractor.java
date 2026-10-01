@@ -137,6 +137,7 @@ public final class RegionLayoutExtractor {
                         new PackedBlockStateArray(LitematicNbt.resolveBlockStates(region), palette.length)
                 );
                 blocks.measureColumnHeights();
+                blocks.measureLayerCounts();
                 result.put(regionName, blocks);
             }
         } catch (final Exception exception) {

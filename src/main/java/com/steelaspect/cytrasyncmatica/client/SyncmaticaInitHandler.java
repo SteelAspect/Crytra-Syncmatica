@@ -34,6 +34,8 @@ public final class SyncmaticaInitHandler implements IInitializationHandler {
                 .setCallback(new HotkeyCallbackOpenGui(GuiBuildManagement::new));
         SyncmaticaHotkeys.OPEN_MATERIAL_TRACKER.getKeybind()
                 .setCallback(new HotkeyCallbackOpenGui(() -> new GuiMaterialTracker(null)));
+        SyncmaticaHotkeys.OPEN_LAYER_PROGRESS.getKeybind()
+                .setCallback(new HotkeyCallbackOpenGui(() -> new com.steelaspect.cytrasyncmatica.client.gui.GuiLayerProgress(null)));
         SyncmaticaHotkeys.TOGGLE_MATERIAL_HUD.getKeybind()
                 .setCallback((action, key) -> {
                     if (action != fi.dy.masa.malilib.hotkeys.KeyAction.PRESS) {

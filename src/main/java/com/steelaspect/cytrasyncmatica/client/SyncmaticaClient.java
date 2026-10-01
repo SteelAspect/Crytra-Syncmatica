@@ -55,6 +55,7 @@ public class SyncmaticaClient implements ClientModInitializer {
         }
         if (client.world != null && client.player != null) {
             MaterialTrackerClient.getInstance().tick();
+            com.steelaspect.cytrasyncmatica.client.layers.LayerProgressClient.getInstance().tick();
             MaterialHud.getInstance().tick();
         }
     }

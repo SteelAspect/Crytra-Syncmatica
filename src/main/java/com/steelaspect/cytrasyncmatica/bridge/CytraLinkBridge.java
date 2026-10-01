@@ -124,6 +124,8 @@ public final class CytraLinkBridge implements LinkExtension, BridgeSink {
                 return done(getMaterials(context, payload));
             case "get_groups":
                 return done(getGroups(context, payload));
+            case "get_layers":
+                return done(getLayers(context, payload));
             case "list_projects":
                 return done(listProjects(context));
             case "get_project":
@@ -158,7 +160,7 @@ public final class CytraLinkBridge implements LinkExtension, BridgeSink {
         o.addProperty("coordinates_hidden", context.getBridge().isHideCoordinates());
         o.addProperty("queued_events", context.getBridge().queuedEvents());
         final JsonArray ops = new JsonArray();
-        for (final String s : new String[] {"ping", "list_schematics", "get_schematic", "get_materials", "get_groups", "get_shopping_list", "get_where", "material_action", "list_projects", "get_project", "project_action", "link_claim"}) {
+        for (final String s : new String[] {"ping", "list_schematics", "get_schematic", "get_materials", "get_groups", "get_shopping_list", "get_where", "material_action", "get_layers", "list_projects", "get_project", "project_action", "link_claim"}) {
             ops.add(s);
         }
         o.add("ops", ops);
@@ -373,6 +375,36 @@ public final class CytraLinkBridge implements LinkExtension, BridgeSink {
             }
         }));
         return out;
+    }
+
+    /** Build progress per world layer, from the server's incremental completion scan. */
+    private JsonObject getLayers(final Context context, final JsonObject payload) {
+        final ServerPlacement p = requirePlacement(context, payload);
+        final com.steelaspect.cytrasyncmatica.service.BuildService build = context.getBuildService();
+        if (build == null || !build.isEnabled()) {
+            throw new IllegalStateException("build management is disabled");
+        }
+        if (!build.isCompletionEnabled()) {
+            throw new IllegalStateException("build completion tracking is disabled (build.completion_enabled)");
+        }
+        final JsonObject o = new JsonObject();
+        o.addProperty("schematic_id", p.getId().toString());
+        o.addProperty("schematic", p.getName());
+        o.addProperty("scanned", build.isScanned(p));
+        o.add("build", BridgeJson.build(p, build));
+        final JsonArray layers = new JsonArray();
+        int done = 0;
+        final java.util.List<com.steelaspect.cytrasyncmatica.service.BuildService.LayerProgress> progress = build.getLayerProgress(p);
+        for (final com.steelaspect.cytrasyncmatica.service.BuildService.LayerProgress l : progress) {
+            layers.add(BridgeJson.layer(l));
+            if (l.complete()) {
+                done++;
+            }
+        }
+        o.add("layers", layers);
+        o.addProperty("layers_total", progress.size());
+        o.addProperty("layers_complete", done);
+        return o;
     }
 
     // -- projects ----------------------------------------------------------------

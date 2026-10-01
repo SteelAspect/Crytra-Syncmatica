@@ -19,6 +19,7 @@ public class MixinMinecraftClient {
         ScreenHelper.close();
         com.steelaspect.cytrasyncmatica.client.materials.MaterialTrackerClient.getInstance().reset();
         com.steelaspect.cytrasyncmatica.client.hud.MaterialHud.getInstance().reset();
+        com.steelaspect.cytrasyncmatica.client.layers.LayerProgressClient.getInstance().reset();
         ClaimedRegionVisibility.getInstance().reset();
         Syncmatica.shutdown();
         LitematicManager.clear();

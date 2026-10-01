@@ -161,5 +161,18 @@
   "cytra-syncmatica.gui.label.projects_need_permission": "Creating and editing projects needs cytra-syncmatica.project.manage on the server",
   "cytra-syncmatica.gui.label.project_prefix": "[Project] ",
   "cytra-syncmatica.gui.label.breakdown": "Per schematic:",
-  "cytra-syncmatica.gui.label.lists_loading": "%d list(s) still loading"
+  "cytra-syncmatica.gui.label.lists_loading": "%d list(s) still loading",
+  "cytra-syncmatica.gui.title.layer_progress": "Layer progress",
+  "cytra-syncmatica.gui.button.layers": "Layers",
+  "cytra-syncmatica.gui.button.all_layers": "All layers",
+  "cytra-syncmatica.gui.button.follow_player": "Follow player: %s",
+  "cytra-syncmatica.gui.button.next_incomplete": "Next incomplete",
+  "cytra-syncmatica.gui.label.layers_scanning": "Scanning the loaded chunks…",
+  "cytra-syncmatica.gui.label.layers_summary": "%d of %d layers done · %.1f%% · %d / %d blocks · %d in unloaded chunks",
+  "cytra-syncmatica.hotkey.open_layer_progress.comment": "Opens the layer progress screen",
+  "cytra-syncmatica.gui.label.hotkey.layer_progress": "Open layer progress",
+  "cytra-syncmatica.config.name.hud_layer_line": "HUD layer line",
+  "cytra-syncmatica.config.comment.hud_layer_line": "Show 'Layer Y: x% · Build: y%' at the top of the material HUD",
+  "cytra-syncmatica.config.name.layer_scan_per_tick": "Layer scan positions per tick",
+  "cytra-syncmatica.config.comment.layer_scan_per_tick": "How many schematic positions the client compares with the world each tick"
 }

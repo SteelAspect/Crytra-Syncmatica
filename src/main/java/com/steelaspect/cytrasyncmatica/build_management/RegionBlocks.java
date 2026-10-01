@@ -16,6 +16,7 @@ public final class RegionBlocks {
     private final Identifier[] palette;
     private final PackedBlockStateArray states;
     private RegionColumnHeights columnHeights;
+    private int[] layerCounts;
 
     public RegionBlocks(final BlockPos absoluteSize, final Identifier[] palette,
                         final PackedBlockStateArray states) {
@@ -43,6 +44,43 @@ public final class RegionBlocks {
      */
     public RegionColumnHeights getColumnHeights() {
         return columnHeights;
+    }
+
+    /**
+     * Counts the positions each schematic layer (local Y) fills with a
+     * non-air block. Walks the whole region, so it runs on the decoding thread
+     * next to {@link #measureColumnHeights()}.
+     */
+    public void measureLayerCounts() {
+        final boolean[] solid = new boolean[palette.length];
+        for (int i = 0; i < palette.length; i++) {
+            final Identifier id = palette[i];
+            solid[i] = id != null && !isAir(id);
+        }
+        final int[] counts = new int[sizeY];
+        for (int y = 0; y < sizeY; y++) {
+            int n = 0;
+            for (int z = 0; z < sizeZ; z++) {
+                for (int x = 0; x < sizeX; x++) {
+                    final int index = paletteIndexAt(x, y, z);
+                    if (index >= 0 && solid[index]) {
+                        n++;
+                    }
+                }
+            }
+            counts[y] = n;
+        }
+        layerCounts = counts;
+    }
+
+    private static boolean isAir(final Identifier id) {
+        final String path = id.getPath();
+        return "minecraft".equals(id.getNamespace()) && ("air".equals(path) || "cave_air".equals(path) || "void_air".equals(path));
+    }
+
+    /** @return non-air positions per local Y, or null when never measured */
+    public int[] getLayerCounts() {
+        return layerCounts;
     }
 
     /** @return roughly what this region costs to keep decoded, for cache budgeting */

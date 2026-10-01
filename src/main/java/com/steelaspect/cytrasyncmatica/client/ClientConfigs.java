@@ -44,6 +44,8 @@ public final class ClientConfigs implements IConfigHandler {
         General.HUD_X.setValueChangeCallback(config -> save());
         General.HUD_Y.setValueChangeCallback(config -> save());
         General.HUD_MAX_ROWS.setValueChangeCallback(config -> save());
+        General.HUD_LAYER_LINE.setValueChangeCallback(config -> save());
+        General.LAYER_SCAN_PER_TICK.setValueChangeCallback(config -> save());
         General.AUTO_COUNT_CONTAINERS.setValueChangeCallback(config -> save());
     }
 
@@ -123,6 +125,14 @@ public final class ClientConfigs implements IConfigHandler {
                 "hudMaxRows", 12, 1, 40,
                 "cytra-syncmatica.config.comment.hud_max_rows",
                 "cytra-syncmatica.config.name.hud_max_rows");
+        public static final ConfigBoolean HUD_LAYER_LINE = new ConfigBoolean(
+                "hudLayerLine", true,
+                "cytra-syncmatica.config.comment.hud_layer_line",
+                "cytra-syncmatica.config.name.hud_layer_line");
+        public static final ConfigInteger LAYER_SCAN_PER_TICK = new ConfigInteger(
+                "layerScanPerTick", 4096, 256, 65536,
+                "cytra-syncmatica.config.comment.layer_scan_per_tick",
+                "cytra-syncmatica.config.name.layer_scan_per_tick");
         /** Whether the auto-count also looks at the container the player has open. */
         public static final ConfigBoolean AUTO_COUNT_CONTAINERS = new ConfigBoolean(
                 "autoCountOpenContainers", true,
@@ -135,6 +145,8 @@ public final class ClientConfigs implements IConfigHandler {
                 HUD_X,
                 HUD_Y,
                 HUD_MAX_ROWS,
+                HUD_LAYER_LINE,
+                LAYER_SCAN_PER_TICK,
                 AUTO_COUNT_CONTAINERS,
                 FOLLOW_CLAIMS,
                 WARN_ON_FOREIGN_PLACEMENT

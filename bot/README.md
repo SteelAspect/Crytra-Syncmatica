@@ -13,6 +13,7 @@ What it does:
 - `/schematic list`, `/schematic info <name>`, `/schematic where <name>` (coordinates hidden when the server says so)
 - `/schematic materials <name> [missing_only] [group]`: the shared list as an embed with a select menu to pick an item, a second select to filter by material group (Stone, Wood, Redstone, ...), buttons **+1 / +16 / +64 / Set… / Mark complete / Reset**, paging, and a missing-only toggle. Every press counts as *your* linked Minecraft player, with that player's in-game permissions; a refusal (not permitted, unknown item) is shown only to you.
 - `/schematic groups <name>`: progress per material group
+- `/schematic layers <name>`: build progress per layer (measured by the server's completion scan)
 - `/schematic shopping <name> [group] [as_file]`: what is still missing as shulkers + stacks + items, grouped; long lists (or `as_file`) come as a text file
 - `/materials <schematic> <item> <amount>`: quick add without the buttons
 - `/project list|info|materials|shopping|where <name>`: projects (several schematics tracked as one combined list; the materials view shows the per-schematic split and edits fill the first schematic with something left first)
@@ -79,6 +80,7 @@ WantedBy=multi-user.target
 | `syncmatica.page_size` | `15` | items per page (max 25) |
 | `syncmatica.feed_edit` | `true` | edit one materials message per schematic in place |
 | `syncmatica.announce_item_completed` / `announce_group_completed` / `announce_schematic_completed` / `announce_project_completed` / `announce_project_changes` / `announce_schematic_shared` | `true` | feed posts |
+| `syncmatica.announce_layer_completed` | `false` | one feed post per finished build layer (noisy on tall builds) |
 | `linking.enabled` | `true` | register `/link`, `/unlink`, `/whoami`, `/links` |
 | `linking.shared_db_path` | `""` | read-only fallback to a cytra-bridge database |
 | `database` | `syncmatica-bot.sqlite3` | this bot's SQLite file |

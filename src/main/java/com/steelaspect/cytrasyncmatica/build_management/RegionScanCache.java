@@ -33,6 +33,10 @@ public final class RegionScanCache {
     private final int maxColumnZ;
     /** Insertion ordered so a stored file keeps a stable shape between saves. */
     private final Map<Long, Integer> counts = new LinkedHashMap<>();
+    /** Per column: matched blocks per world layer, index = y - minY. Absent for columns counted without layer data. */
+    private final Map<Long, int[]> layerCounts = new LinkedHashMap<>();
+    private final long[] layerTotals;
+    private long[] expectedLayers;
     private long total;
 
     public RegionScanCache(final RegionBounds bounds) {
@@ -41,6 +45,16 @@ public final class RegionScanCache {
         minColumnZ = bounds.getMin().getZ() >> 4;
         maxColumnX = bounds.getMax().getX() >> 4;
         maxColumnZ = bounds.getMax().getZ() >> 4;
+        layerTotals = new long[Math.max(1, bounds.getMax().getY() - bounds.getMin().getY() + 1)];
+    }
+
+    /** Lowest world Y of the box; layer arrays are indexed from it. */
+    public int minY() {
+        return bounds.getMin().getY();
+    }
+
+    public int layerCount() {
+        return layerTotals.length;
     }
 
     public RegionBounds getBounds() {
@@ -80,11 +94,57 @@ public final class RegionScanCache {
      * region never covered.
      */
     public void record(final int columnX, final int columnZ, final int matched) {
+        record(columnX, columnZ, matched, null);
+    }
+
+    /**
+     * Same, with the column's matched blocks per world layer ({@code layers[y - minY]});
+     * null keeps the total but contributes nothing to the layer totals.
+     */
+    public void record(final int columnX, final int columnZ, final int matched, final int[] layers) {
         if (!covers(columnX, columnZ)) {
             return;
         }
-        final Integer previous = counts.put(packColumn(columnX, columnZ), Math.max(0, matched));
+        final long packed = packColumn(columnX, columnZ);
+        final Integer previous = counts.put(packed, Math.max(0, matched));
         total += Math.max(0, matched) - (previous == null ? 0 : previous);
+        final int[] old = layerCounts.remove(packed);
+        if (old != null) {
+            for (int i = 0; i < old.length && i < layerTotals.length; i++) {
+                layerTotals[i] -= old[i];
+            }
+        }
+        if (layers != null) {
+            final int[] copy = java.util.Arrays.copyOf(layers, layerTotals.length);
+            for (int i = 0; i < copy.length; i++) {
+                copy[i] = Math.max(0, copy[i]);
+                layerTotals[i] += copy[i];
+            }
+            layerCounts.put(packed, copy);
+        }
+    }
+
+    /** @return the stored per-layer counts of a column, or null */
+    public int[] getLayerCounts(final long packedColumn) {
+        return layerCounts.get(packedColumn);
+    }
+
+    /** @return matched blocks per world layer across the counted columns (index = y - minY) */
+    public long[] getLayerTotals() {
+        return layerTotals.clone();
+    }
+
+    /** Non-air schematic positions per world layer for this box; set once the layout is known. */
+    public long[] getExpectedLayers() {
+        return expectedLayers == null ? null : expectedLayers.clone();
+    }
+
+    public void setExpectedLayers(final long[] expected) {
+        expectedLayers = expected == null ? null : java.util.Arrays.copyOf(expected, layerTotals.length);
+    }
+
+    public boolean hasLayerData() {
+        return !layerCounts.isEmpty();
     }
 
     /**

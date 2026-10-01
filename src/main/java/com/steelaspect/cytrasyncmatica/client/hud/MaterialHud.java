@@ -69,6 +69,12 @@ public final class MaterialHud implements HudRenderCallback {
         if (!ClientConfigs.General.HUD_ENABLED.getBooleanValue()) {
             return;
         }
+        if (ClientConfigs.General.HUD_LAYER_LINE.getBooleanValue()) {
+            final String line = com.steelaspect.cytrasyncmatica.client.layers.LayerProgressClient.getInstance().hudLine();
+            if (line != null) {
+                rows.add(new Row(ItemStack.EMPTY, line, "", 0, false, true));
+            }
+        }
         final MaterialTrackerClient tracker = MaterialTrackerClient.getInstance();
         final Map<String, Set<String>> pinned = MaterialTrackerPreferences.allPinned();
         if (pinned.isEmpty()) {

@@ -145,7 +145,16 @@ config, the UI, the lang files, the docs and the build:
   `project_action`, project targets on every list request, `parts` per
   item, events `project_changed` / `project_completed`. New packets
   `project_list` / `project_request` / `project_manage`.
+- Layer progress (Step 3.3). Server: the build completion scan now also
+  counts per world layer (stored with the per-chunk counts under
+  `<world>/cytra-syncmatica/`), exposed as `get_layers`, a `build` summary on
+  every schematic object and a `layer_completed` bridge event. Client: a
+  "Layers" screen (per-layer bars; click a layer to show it in Litematica,
+  "All layers", "Follow player", "Next incomplete"), measured on the client by
+  comparing Litematica's schematic world with the real world in every mode,
+  a "Layer Y: x% · Build: y%" line at the top of the material HUD
+  (`hudLayerLine`), hotkey `openLayerProgress`, `layerScanPerTick` setting.
 - Standalone Discord bot in `bot/` (own application, config, SQLite):
   `/link`, `/unlink`, `/whoami`, `/links`, `/schematic list|info|materials|where`,
-  `/schematic groups`, `/schematic shopping`, `/materials`, `/project …`, a group filter in the materials view,
+  `/schematic groups`, `/schematic shopping`, `/schematic layers`, `/materials`, `/project …`, a group filter in the materials view,
   live feed channel.

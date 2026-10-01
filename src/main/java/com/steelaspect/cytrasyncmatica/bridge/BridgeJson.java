@@ -73,6 +73,49 @@ public final class BridgeJson {
             o.addProperty("unique_blocks", stats.uniqueItems());
         }
         o.add("materials", summary(list));
+        o.add("build", build(p, null));
+        return o;
+    }
+
+    /** Build completion of a placement from its scanned sub-regions, plus layer counts when a service is given. */
+    public static JsonObject build(final ServerPlacement p, final com.steelaspect.cytrasyncmatica.service.BuildService build) {
+        final JsonObject b = new JsonObject();
+        long required = 0;
+        long placed = 0;
+        boolean scanned = false;
+        for (final com.steelaspect.cytrasyncmatica.build_management.BuildRegion r : p.getBuildRegions().getRegions()) {
+            required += r.getRequiredBlocks();
+            if (r.isScanned()) {
+                scanned = true;
+                placed += r.getPlacedBlocks();
+            }
+        }
+        b.addProperty("scanned", scanned);
+        b.addProperty("required", required);
+        b.addProperty("placed", placed);
+        b.addProperty("percent", required == 0 ? 100.0 : Math.round(1000.0 * placed / required) / 10.0);
+        b.addProperty("complete", scanned && placed >= required);
+        if (build != null) {
+            final java.util.List<com.steelaspect.cytrasyncmatica.service.BuildService.LayerProgress> layers = build.getLayerProgress(p);
+            int done = 0;
+            for (final com.steelaspect.cytrasyncmatica.service.BuildService.LayerProgress l : layers) {
+                if (l.complete()) {
+                    done++;
+                }
+            }
+            b.addProperty("layers_total", layers.size());
+            b.addProperty("layers_complete", done);
+        }
+        return b;
+    }
+
+    public static JsonObject layer(final com.steelaspect.cytrasyncmatica.service.BuildService.LayerProgress l) {
+        final JsonObject o = new JsonObject();
+        o.addProperty("y", l.y());
+        o.addProperty("expected", l.expected());
+        o.addProperty("placed", l.placed());
+        o.addProperty("percent", Math.round(l.percent() * 10.0) / 10.0);
+        o.addProperty("complete", l.complete());
         return o;
     }
 

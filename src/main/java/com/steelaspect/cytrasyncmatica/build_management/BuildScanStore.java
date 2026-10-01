@@ -45,6 +45,7 @@ public final class BuildScanStore {
     private static final String FIELD_MIN = "min";
     private static final String FIELD_MAX = "max";
     private static final String FIELD_SCANNED_AT = "scannedAt";
+    private static final String FIELD_LAYERS = "layers";
     private static final String FIELD_COLUMNS = "columns";
     private static final int COLUMN_STRIDE = 3;
     /**
@@ -162,6 +163,21 @@ public final class BuildScanStore {
             columns.add(column.getValue());
         }
         node.add(FIELD_COLUMNS, columns);
+        if (cache.hasLayerData()) {
+            final JsonObject layers = new JsonObject();
+            for (final Long packed : cache.getCounts().keySet()) {
+                final int[] perLayer = cache.getLayerCounts(packed);
+                if (perLayer == null) {
+                    continue;
+                }
+                final JsonArray arr = new JsonArray();
+                for (final int n : perLayer) {
+                    arr.add(n);
+                }
+                layers.add(RegionScanCache.columnX(packed) + "," + RegionScanCache.columnZ(packed), arr);
+            }
+            node.add(FIELD_LAYERS, layers);
+        }
         return node;
     }
 
@@ -178,14 +194,24 @@ public final class BuildScanStore {
         }
         final JsonArray columns = node.getAsJsonArray(FIELD_COLUMNS);
         final RegionScanCache cache = new RegionScanCache(new RegionBounds(min, max));
+        final JsonObject layers = node.has(FIELD_LAYERS) && node.get(FIELD_LAYERS).isJsonObject() ? node.getAsJsonObject(FIELD_LAYERS) : null;
         final int entries = Math.min(columns.size() / COLUMN_STRIDE, MAX_COLUMNS);
         for (int entry = 0; entry < entries; entry++) {
             final int offset = entry * COLUMN_STRIDE;
-            cache.record(
-                    columns.get(offset).getAsInt(),
-                    columns.get(offset + 1).getAsInt(),
-                    columns.get(offset + 2).getAsInt()
-            );
+            final int cx = columns.get(offset).getAsInt();
+            final int cz = columns.get(offset + 1).getAsInt();
+            int[] perLayer = null;
+            if (layers != null) {
+                final JsonElement arr = layers.get(cx + "," + cz);
+                if (arr != null && arr.isJsonArray()) {
+                    final JsonArray a = arr.getAsJsonArray();
+                    perLayer = new int[Math.min(a.size(), cache.layerCount())];
+                    for (int i = 0; i < perLayer.length; i++) {
+                        perLayer[i] = a.get(i).getAsInt();
+                    }
+                }
+            }
+            cache.record(cx, cz, columns.get(offset + 2).getAsInt(), perLayer);
         }
         return cache;
     }

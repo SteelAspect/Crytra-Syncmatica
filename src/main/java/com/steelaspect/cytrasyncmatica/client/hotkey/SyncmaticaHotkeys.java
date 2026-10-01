@@ -69,8 +69,21 @@ public final class SyncmaticaHotkeys {
         }
     };
 
+    public static final ConfigHotkey OPEN_LAYER_PROGRESS = new ConfigHotkey(
+            "openLayerProgress",
+            "",
+            HOTKEY_SETTINGS,
+            "cytra-syncmatica.hotkey.open_layer_progress.comment",
+            "cytra-syncmatica.gui.label.hotkey.layer_progress"
+    ) {
+        @Override
+        public String getConfigGuiDisplayName() {
+            return getPrettyName();
+        }
+    };
+
     private static final List<ConfigHotkey> HOTKEYS = Collections.unmodifiableList(
-            Arrays.asList(OPEN_MATERIAL_TRACKER, TOGGLE_MATERIAL_HUD, OPEN_BUILD_MANAGEMENT)
+            Arrays.asList(OPEN_MATERIAL_TRACKER, TOGGLE_MATERIAL_HUD, OPEN_BUILD_MANAGEMENT, OPEN_LAYER_PROGRESS)
     );
 
     private SyncmaticaHotkeys() {

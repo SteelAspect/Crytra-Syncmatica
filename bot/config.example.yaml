@@ -21,6 +21,7 @@ syncmatica:
   announce_group_completed: true
   announce_project_completed: true
   announce_project_changes: true
+  announce_layer_completed: false
   announce_schematic_completed: true
   announce_schematic_shared: true
 

@@ -101,6 +101,13 @@ class Feed(commands.Cog):
             return
         await self._send(content=f"🎉 All materials for **{s.get('name', '?')}** are gathered · {ui.player_text(payload.get('editor'))}")
 
+    async def ev_layer_completed(self, payload: dict) -> None:
+        if not self.cfg.syncmatica.announce_layer_completed:
+            return
+        layer = payload.get("layer") or {}
+        await self._send(content=f"🧱 Layer **Y {layer.get('y', '?')}** of **{payload.get('schematic', '?')}** is built "
+                                 f"({payload.get('layers_complete', '?')}/{payload.get('layers_total', '?')} layers)")
+
     async def ev_project_changed(self, payload: dict) -> None:
         if not self.cfg.syncmatica.announce_project_changes:
             return

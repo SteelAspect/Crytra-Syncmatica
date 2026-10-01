@@ -122,6 +122,11 @@ public class GuiMaterialTracker extends GuiListBase<MaterialEntry, WidgetMateria
             gui.setParent(this);
             openGui(gui);
         });
+        x = addTopButton(x, StringUtils.translate("cytra-syncmatica.gui.button.layers"), (b, m) -> {
+            final GuiLayerProgress gui = new GuiLayerProgress(schematic);
+            gui.setParent(this);
+            openGui(gui);
+        });
         x = addTopButton(x, StringUtils.translate("cytra-syncmatica.gui.button.export"), (b, m) -> exportLocal());
         x = addTopButton(x, StringUtils.translate("cytra-syncmatica.gui.button.refresh"), (b, m) -> {
             MaterialTrackerClient.getInstance().refresh(schematic);

@@ -177,6 +177,20 @@ async def test_project_commands_manage_and_show_projects():
         await shutdown(bot, server)
 
 
+async def test_layers_command_shows_build_progress_per_layer():
+    bot, server, ext = await make_bot()
+    try:
+        cog = Schematics(bot)
+        it = FakeInteraction(make_member(1), bot)
+        await cog.layers.callback(cog, it, "Iron farm")
+        embed = it.followup.sent[-1]["embed"]
+        assert embed.title == "Layers: Iron farm" and "2 of 4 layers done" in embed.description and "50.0%" in embed.description
+        value = embed.fields[0].value
+        assert value.splitlines()[0].startswith("▫️ **Y 67**") and "✅ **Y 64**" in value
+    finally:
+        await shutdown(bot, server)
+
+
 async def test_groups_command_lists_progress_per_group():
     bot, server, ext = await make_bot()
     try:
@@ -246,6 +260,12 @@ async def test_feed_edits_one_message_per_schematic_and_refreshes_on_resync():
         assert "Project **Base** created" in channel.sent[-1]["content"]
         await feed.on_link_event("project_completed", {"project": {"id": "p1", "name": "Base", "members": [1]}, "editor": {"name": "OpPlayer"}}, 8)
         assert "project **Base**" in channel.sent[-1]["content"]
+        before = len(channel.sent)
+        await feed.on_link_event("layer_completed", {"schematic": "Iron farm", "layer": {"y": 64}, "layers_complete": 1, "layers_total": 4}, 9)
+        assert len(channel.sent) == before, "layer posts are off by default"
+        bot.cfg.syncmatica.announce_layer_completed = True
+        await feed.on_link_event("layer_completed", {"schematic": "Iron farm", "layer": {"y": 64}, "layers_complete": 1, "layers_total": 4}, 10)
+        assert "Layer **Y 64**" in channel.sent[-1]["content"]
     finally:
         await shutdown(bot, server)
 

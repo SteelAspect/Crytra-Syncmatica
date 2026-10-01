@@ -67,6 +67,7 @@ class SyncmaticaConfig:
     announce_group_completed: bool = True
     announce_project_completed: bool = True
     announce_project_changes: bool = True
+    announce_layer_completed: bool = False
     announce_schematic_completed: bool = True
     announce_schematic_shared: bool = True
 

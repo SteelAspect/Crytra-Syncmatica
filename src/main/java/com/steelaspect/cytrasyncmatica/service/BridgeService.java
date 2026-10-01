@@ -35,7 +35,7 @@ import java.util.UUID;
  * <p>All methods run on the server thread except {@link #onBotConnected()} and
  * {@link #flushIfDue()} callers, which hand over to it.
  */
-public class BridgeService extends AbstractService implements MaterialEventListener, ProjectService.Listener {
+public class BridgeService extends AbstractService implements MaterialEventListener, ProjectService.Listener, BuildService.Listener {
     private static final Logger LOGGER = LogManager.getLogger(BridgeService.class);
     public static final int PROTOCOL_VERSION = 1;
     public static final boolean ENABLED_DEFAULT = true;
@@ -128,6 +128,9 @@ public class BridgeService extends AbstractService implements MaterialEventListe
         if (context.getProjects() != null) {
             context.getProjects().addListener(this);
         }
+        if (context.getBuildService() != null) {
+            context.getBuildService().addListener(this);
+        }
     }
 
     @Override
@@ -137,6 +140,9 @@ public class BridgeService extends AbstractService implements MaterialEventListe
         }
         if (context != null && context.getProjects() != null) {
             context.getProjects().removeListener(this);
+        }
+        if (context != null && context.getBuildService() != null) {
+            context.getBuildService().removeListener(this);
         }
         queue.clear();
         batches.clear();
@@ -276,6 +282,20 @@ public class BridgeService extends AbstractService implements MaterialEventListe
         o.add("group", group.toJson());
         o.add("editor", BridgeJson.player(editor));
         publish("group_completed", o);
+    }
+
+    // -- build events (BuildService.Listener, server thread) ------------------------------
+
+    @Override
+    public void onLayerCompleted(final ServerPlacement placement, final BuildService.LayerProgress layer, final int completeLayers, final int totalLayers) {
+        final JsonObject o = new JsonObject();
+        o.addProperty("schematic_id", placement.getId().toString());
+        o.addProperty("schematic", placement.getName());
+        o.add("layer", BridgeJson.layer(layer));
+        o.addProperty("layers_complete", completeLayers);
+        o.addProperty("layers_total", totalLayers);
+        o.add("build", BridgeJson.build(placement, context.getBuildService()));
+        publish("layer_completed", o);
     }
 
     // -- project events (ProjectService.Listener, server thread) ------------------------

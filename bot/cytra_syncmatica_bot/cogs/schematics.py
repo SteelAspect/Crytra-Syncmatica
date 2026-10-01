@@ -316,6 +316,14 @@ class Schematics(commands.Cog):
         else:
             await interaction.followup.send(embed=e)
 
+    @schematic.command(name="layers", description="Build progress per layer, measured by the server")
+    @app_commands.describe(name="Schematic name")
+    @app_commands.autocomplete(name=schematic_autocomplete)
+    async def layers(self, interaction: discord.Interaction, name: str) -> None:
+        await interaction.response.defer()
+        out = await self.bot.ext("get_layers", {"schematic": name})
+        await interaction.followup.send(embed=ui.layers_embed(out, self.cfg.server.name))
+
     @schematic.command(name="where", description="Dimension and coordinates of a shared schematic")
     @app_commands.describe(name="Schematic name")
     @app_commands.autocomplete(name=schematic_autocomplete)

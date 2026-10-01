@@ -51,7 +51,7 @@ a UUID prefix of at least 8 characters).
 {"t":"ext","id":1,"ns":"cytra-syncmatica","v":1,"op":"ping","payload":{}}
 ```
 ```json
-{"t":"res","id":1,"ok":true,"out":{"mod":"1.0.0+1.21.11","protocol":1,"schematics":3,"materials_enabled":true,"coordinates_hidden":false,"queued_events":0,"ops":["ping","list_schematics","get_schematic","get_materials","get_groups","get_shopping_list","get_where","material_action","list_projects","get_project","project_action","link_claim"]}}
+{"t":"res","id":1,"ok":true,"out":{"mod":"1.0.0+1.21.11","protocol":1,"schematics":3,"materials_enabled":true,"coordinates_hidden":false,"queued_events":0,"ops":["ping","list_schematics","get_schematic","get_materials","get_groups","get_shopping_list","get_where","material_action","get_layers","list_projects","get_project","project_action","link_claim"]}}
 ```
 
 ### `list_schematics`
@@ -225,6 +225,34 @@ through fabric-permissions-api, offline players included).
 | `unknown item <id> in <schematic>` | item is not in that schematic's list |
 | `no material list yet for <schematic>` / `material tracking is disabled` | nothing to edit |
 
+### `get_layers`
+
+Build progress per world layer, from the server's incremental completion scan
+(build management; needs `build.enabled` and `build.completion_enabled`).
+Only layers the schematic fills are listed, lowest Y first. `scanned` is
+false until at least one sub-region was measured (its chunks have to be
+loaded once).
+
+```json
+{"t":"ext","id":13,"ns":"cytra-syncmatica","v":1,"op":"get_layers","payload":{"schematic":"Iron farm"}}
+```
+```json
+{"t":"res","id":13,"ok":true,"out":{"schematic_id":"8f2a6c1e-1b2c-4d3e-9f00-112233445566","schematic":"Iron farm","scanned":true,"build":{"scanned":true,"required":135,"placed":36,"percent":26.7,"complete":false,"layers_total":4,"layers_complete":1},"layers":[
+  {"y":64,"expected":36,"placed":36,"percent":100.0,"complete":true},
+  {"y":65,"expected":36,"placed":0,"percent":0.0,"complete":false},
+  {"y":66,"expected":36,"placed":0,"percent":0.0,"complete":false},
+  {"y":67,"expected":29,"placed":0,"percent":0.0,"complete":false}
+],"layers_total":4,"layers_complete":1}}
+```
+
+`expected` / `required` count the positions that need a block placed, the
+way the build scan counts them (air, the upper half of doors and beds, and
+blocks without an item form are left out). Every schematic object
+(`list_schematics`, `get_schematic`, events) also carries
+`"build": {"scanned","required","placed","percent","complete"}`.
+Errors: `build management is disabled`, `build completion tracking is
+disabled (build.completion_enabled)`.
+
 ### `list_projects`
 
 ```json
@@ -359,6 +387,15 @@ flushed first.
 {"t":"ev","ns":"cytra-syncmatica","v":1,"type":"schematic_completed","payload":{"schematic":{ ...list_schematics entry... },"editor":{"uuid":"069a79f4-44e9-4726-a5be-fca90e38aaf5","name":"Notch"}},"ts":1790000800000}
 ```
 
+### `layer_completed`
+
+A world layer went from incomplete to complete in the server's scan (once per
+layer; not sent for layers that were already complete when the server started).
+
+```json
+{"t":"ev","ns":"cytra-syncmatica","v":1,"type":"layer_completed","payload":{"schematic_id":"8f2a6c1e-1b2c-4d3e-9f00-112233445566","schematic":"Iron farm","layer":{"y":64,"expected":36,"placed":36,"percent":100.0,"complete":true},"layers_complete":1,"layers_total":4,"build":{"scanned":true,"required":135,"placed":36,"percent":26.7,"complete":false,"layers_total":4,"layers_complete":1}},"ts":1790001000000}
+```
+
 ### `project_changed`
 
 After `create`, `rename`, `add`, `remove` or `delete` (also when a shared
@@ -400,6 +437,5 @@ Live changes: `/cytra-syncmatica config set bridge <key> <value>`.
 
 ## Not yet in this version
 
-`get_layers`, `get_preview` and the `layer_completed` event are added by the
-remaining Step 3 extras and documented here as they land. Until then they
-answer `unknown op <op>`.
+`get_preview` is added by the last Step 3 extra and documented here when it
+lands. Until then it answers `unknown op get_preview`.

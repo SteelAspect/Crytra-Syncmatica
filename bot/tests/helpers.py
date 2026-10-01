@@ -44,6 +44,7 @@ class FakeSyncmaticaExtension:
         self.codes = {"K7P2XQ": (OP_UUID, "OpPlayer")}
         self.actions: list[dict] = []
         self.hide_coordinates = False
+        self.layers = [{"y": 64 + i, "expected": 36, "placed": 36 if i < 2 else 0} for i in range(4)]
         self.projects: dict[str, dict] = {}  # id -> {"id", "name", "members": [schematic ids]}
         self.project_actions: list[dict] = []
 
@@ -114,6 +115,16 @@ class FakeSyncmaticaExtension:
             for it in out.get("items") or []:
                 it["parts"] = [{"schematic_id": SCHEMATIC_ID, "schematic": "Iron farm", "required": it["required"], "gathered": it["gathered"], "remaining": it["remaining"]}]
             return out
+        if op == "get_layers":
+            name = payload.get("schematic"); sid = payload.get("schematic_id")
+            if sid not in (None, SCHEMATIC_ID) or (name not in (None, "Iron farm", "iron_farm")):
+                raise ExtensionError(f"unknown schematic {name or sid}")
+            layers = [dict(l, percent=100.0 * l["placed"] / l["expected"], complete=l["placed"] >= l["expected"]) for l in self.layers]
+            placed = sum(l["placed"] for l in layers); req = sum(l["expected"] for l in layers)
+            return {"schematic_id": SCHEMATIC_ID, "schematic": "Iron farm", "scanned": True,
+                    "build": {"scanned": True, "required": req, "placed": placed, "percent": round(100.0 * placed / req, 1), "complete": placed >= req,
+                              "layers_total": len(layers), "layers_complete": sum(1 for l in layers if l["complete"])},
+                    "layers": layers, "layers_total": len(layers), "layers_complete": sum(1 for l in layers if l["complete"])}
         if op == "list_projects":
             return {"projects": [self.project(p) for p in self.projects.values()]}
         if op == "get_project":

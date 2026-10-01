@@ -130,6 +130,102 @@ public class BuildService extends AbstractService {
     private final ArrayDeque<UUID> deferredLayouts = new ArrayDeque<>();
     private final Set<UUID> deferredLayoutIds = new HashSet<>();
 
+    /** Server-side hooks for build progress (the Discord bridge). Called on the server thread. */
+    public interface Listener {
+        /** A world layer of a placement went from incomplete to complete. */
+        default void onLayerCompleted(ServerPlacement placement, LayerProgress layer, int completeLayers, int totalLayers) {
+        }
+    }
+
+    /** One world layer (Y) of a placement: non-air schematic positions and how many hold the right block. */
+    public record LayerProgress(int y, long expected, long placed) {
+        public boolean complete() {
+            return expected > 0 && placed >= expected;
+        }
+
+        public double percent() {
+            return expected == 0 ? 100.0 : Math.min(100.0, 100.0 * placed / expected);
+        }
+    }
+
+    private final List<Listener> listeners = new java.util.concurrent.CopyOnWriteArrayList<>();
+    private final Map<UUID, Set<Integer>> completedLayers = new HashMap<>();
+
+    public void addListener(final Listener l) {
+        listeners.add(l);
+    }
+
+    public void removeListener(final Listener l) {
+        listeners.remove(l);
+    }
+
+    /**
+     * Progress per world layer, lowest Y first, summed over the placement's
+     * sub-regions. Only layers the schematic fills are listed; empty while no
+     * region has been scanned yet.
+     */
+    public List<LayerProgress> getLayerProgress(final ServerPlacement placement) {
+        final java.util.TreeMap<Integer, long[]> byY = new java.util.TreeMap<>();
+        if (placement == null) {
+            return List.of();
+        }
+        for (final BuildRegion region : placement.getBuildRegions().getRegions()) {
+            final RegionScanCache cache = region.getScanCache();
+            if (cache == null) {
+                continue;
+            }
+            final long[] expected = cache.getExpectedLayers();
+            final long[] placed = cache.getLayerTotals();
+            if (expected == null) {
+                continue;
+            }
+            for (int i = 0; i < expected.length; i++) {
+                if (expected[i] <= 0) {
+                    continue;
+                }
+                final long[] t = byY.computeIfAbsent(cache.minY() + i, k -> new long[2]);
+                t[0] += expected[i];
+                t[1] += Math.min(placed[i], expected[i]);
+            }
+        }
+        final List<LayerProgress> out = new ArrayList<>(byY.size());
+        for (final Map.Entry<Integer, long[]> e : byY.entrySet()) {
+            out.add(new LayerProgress(e.getKey(), e.getValue()[0], e.getValue()[1]));
+        }
+        return out;
+    }
+
+    /** @return true once at least one region has been measured */
+    public boolean isScanned(final ServerPlacement placement) {
+        for (final BuildRegion region : placement.getBuildRegions().getRegions()) {
+            if (region.isScanned()) {
+                return true;
+            }
+        }
+        return false;
+    }
+
+    private void reportLayerCompletion(final ServerPlacement placement) {
+        final List<LayerProgress> layers = getLayerProgress(placement);
+        final Set<Integer> now = new HashSet<>();
+        for (final LayerProgress l : layers) {
+            if (l.complete()) {
+                now.add(l.y());
+            }
+        }
+        final Set<Integer> before = completedLayers.put(placement.getId(), now);
+        if (before == null) {
+            return; // first measurement after attach: nothing "just" completed
+        }
+        for (final LayerProgress l : layers) {
+            if (l.complete() && !before.contains(l.y())) {
+                for (final Listener listener : listeners) {
+                    listener.onLayerCompleted(placement, l, now.size(), layers.size());
+                }
+            }
+        }
+    }
+
     /** What a claim toggle did, so the caller can pick the right reply. */
     public enum ClaimOutcome {
         CLAIMED,
@@ -175,6 +271,7 @@ public class BuildService extends AbstractService {
         deferredLayouts.removeIf(placementId::equals);
         lastScanTick.remove(placementId);
         blocksCache.remove(placementId);
+        completedLayers.remove(placementId);
         cancelScanFor(placementId);
         tracker.forget(placementId);
         final BuildScanStore store = scanStore();
@@ -477,10 +574,12 @@ public class BuildService extends AbstractService {
         if (scan.results.isEmpty()) {
             return;
         }
-        if (applyRegionCounts(placement, scan.results, System.currentTimeMillis())) {
+        final boolean changed = applyRegionCounts(placement, scan.results, System.currentTimeMillis());
+        if (changed) {
             persistAndBroadcast(placement);
             saveScanData(placement);
         }
+        reportLayerCompletion(placement);
     }
 
     /**
@@ -824,6 +923,8 @@ public class BuildService extends AbstractService {
         private WorldChunk currentChunk;
         private Iterator<BlockPos> positions;
         private int columnMatched;
+        private int[] columnLayers;
+        private int cacheMinY;
         private boolean finished;
 
         private CompletionScan(final ServerPlacement placement, final ServerWorld world,
@@ -913,6 +1014,10 @@ public class BuildService extends AbstractService {
             // making the world find it again for every position in it.
             if (expected != null && currentChunk.getBlockState(pos).getBlock() == expected) {
                 columnMatched++;
+                final int layer = pos.getY() - cacheMinY;
+                if (columnLayers != null && layer >= 0 && layer < columnLayers.length) {
+                    columnLayers[layer]++;
+                }
             }
         }
 
@@ -947,6 +1052,27 @@ public class BuildService extends AbstractService {
             currentMapper = mapper;
             currentHeights = currentBlocks.getColumnHeights();
             remainingColumns = cache.columns();
+            cacheMinY = cache.minY();
+            columnLayers = new int[cache.layerCount()];
+            if (cache.getExpectedLayers() == null) {
+                cache.setExpectedLayers(expectedLayers(currentBlocks, mapper, bounds));
+            }
+        }
+
+        /** Non-air schematic positions per world layer of this box, from the decoded layout. */
+        private long[] expectedLayers(final RegionBlocks blocks, final RegionLocalMapper mapper, final RegionBounds bounds) {
+            final int[] local = blocks.getLayerCounts();
+            final long[] out = new long[bounds.getMax().getY() - bounds.getMin().getY() + 1];
+            if (local == null) {
+                return out;
+            }
+            for (int localY = 0; localY < local.length; localY++) {
+                final int index = mapper.worldY(localY) - bounds.getMin().getY();
+                if (index >= 0 && index < out.length) {
+                    out[index] += local[localY];
+                }
+            }
+            return out;
         }
 
         private void beginColumn(final long packedColumn) {
@@ -1028,7 +1154,7 @@ public class BuildService extends AbstractService {
         private boolean commitColumn() {
             final boolean examined = columnActive;
             if (examined) {
-                currentCache.record(columnX, columnZ, columnMatched);
+                currentCache.record(columnX, columnZ, columnMatched, columnLayers);
             }
             abandonColumn();
             return examined;
@@ -1039,6 +1165,9 @@ public class BuildService extends AbstractService {
             positions = null;
             currentChunk = null;
             columnMatched = 0;
+            if (columnLayers != null) {
+                java.util.Arrays.fill(columnLayers, 0);
+            }
         }
 
         private void closeCurrentRegion() {
