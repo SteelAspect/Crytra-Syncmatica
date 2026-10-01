@@ -124,6 +124,8 @@ public final class CytraLinkBridge implements LinkExtension, BridgeSink {
                 return done(getMaterials(context, payload));
             case "get_groups":
                 return done(getGroups(context, payload));
+            case "get_shopping_list":
+                return done(getShoppingList(context, payload));
             case "get_where":
                 return done(getWhere(context, payload));
             case "material_action":
@@ -150,7 +152,7 @@ public final class CytraLinkBridge implements LinkExtension, BridgeSink {
         o.addProperty("coordinates_hidden", context.getBridge().isHideCoordinates());
         o.addProperty("queued_events", context.getBridge().queuedEvents());
         final JsonArray ops = new JsonArray();
-        for (final String s : new String[] {"ping", "list_schematics", "get_schematic", "get_materials", "get_groups", "get_where", "material_action", "link_claim"}) {
+        for (final String s : new String[] {"ping", "list_schematics", "get_schematic", "get_materials", "get_groups", "get_shopping_list", "get_where", "material_action", "link_claim"}) {
             ops.add(s);
         }
         o.add("ops", ops);
@@ -234,6 +236,23 @@ public final class CytraLinkBridge implements LinkExtension, BridgeSink {
         o.addProperty("schematic", p.getName());
         o.add("summary", BridgeJson.summary(list));
         o.add("groups", BridgeJson.groups(list));
+        return o;
+    }
+
+    private JsonObject getShoppingList(final Context context, final JsonObject payload) {
+        final ServerPlacement p = requirePlacement(context, payload);
+        final MaterialList list = requireList(context, p);
+        final String group = str(payload, "group", "");
+        final List<com.steelaspect.cytrasyncmatica.materials.ShoppingList.Line> lines =
+                com.steelaspect.cytrasyncmatica.materials.ShoppingList.build(list, null, MaterialTrackingService::stackSizeOf, group);
+        final String title = p.getName() + (group.isBlank() ? "" : " (" + group.trim() + ")");
+        final JsonObject o = com.steelaspect.cytrasyncmatica.materials.ShoppingList.toJson(title, lines);
+        o.addProperty("schematic_id", p.getId().toString());
+        o.addProperty("schematic", p.getName());
+        if (!group.isBlank()) {
+            o.addProperty("group", group.trim());
+        }
+        o.add("summary", BridgeJson.summary(list));
         return o;
     }
 

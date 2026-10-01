@@ -87,7 +87,7 @@ class FakeSyncmaticaExtension:
                     "coordinates_hidden": self.hide_coordinates, "queued_events": 0, "ops": ["ping"]}
         if op == "list_schematics":
             return {"schematics": [self.schematic()]}
-        if op in ("get_schematic", "get_materials", "get_groups", "get_where", "material_action"):
+        if op in ("get_schematic", "get_materials", "get_groups", "get_shopping_list", "get_where", "material_action"):
             name = payload.get("schematic"); sid = payload.get("schematic_id")
             if sid not in (None, SCHEMATIC_ID) or (name not in (None, "Iron farm", "iron_farm")):
                 raise ExtensionError(f"unknown schematic {name or sid}")
@@ -109,6 +109,20 @@ class FakeSyncmaticaExtension:
             off, lim = int(payload.get("offset", 0)), int(payload.get("limit", 50))
             return {"schematic_id": SCHEMATIC_ID, "schematic": "Iron farm", "summary": self.summary(), "total": len(entries),
                     "offset": off, "limit": lim, "items": entries[off:off + lim]}
+        if op == "get_shopping_list":
+            lines = []
+            for item, (req, got) in self.items.items():
+                if payload.get("group") and self.GROUPS[item].lower() != payload["group"].lower():
+                    continue
+                if req - got > 0:
+                    lines.append({"item": item, "group": self.GROUPS[item], "remaining": req - got, "stack_size": 64, "text": str(req - got)})
+            lines.sort(key=lambda l: (["Stone", "Wood", "Glass"].index(l["group"]), -l["remaining"]))
+            text = "Shopping list for Iron farm\n" + "\n".join(f"  {l['item']} {l['text']}" for l in lines)
+            out = {"schematic_id": SCHEMATIC_ID, "schematic": "Iron farm", "summary": self.summary(), "total_items": sum(l["remaining"] for l in lines),
+                   "total_lines": len(lines), "shulker_boxes": len(lines), "lines": lines, "text": text}
+            if payload.get("group"):
+                out["group"] = payload["group"]
+            return out
         if op == "get_groups":
             return {"schematic_id": SCHEMATIC_ID, "schematic": "Iron farm", "summary": self.summary(), "groups": self.groups()}
         if op == "material_action":

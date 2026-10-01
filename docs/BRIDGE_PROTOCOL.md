@@ -51,7 +51,7 @@ a UUID prefix of at least 8 characters).
 {"t":"ext","id":1,"ns":"cytra-syncmatica","v":1,"op":"ping","payload":{}}
 ```
 ```json
-{"t":"res","id":1,"ok":true,"out":{"mod":"1.0.0+1.21.11","protocol":1,"schematics":3,"materials_enabled":true,"coordinates_hidden":false,"queued_events":0,"ops":["ping","list_schematics","get_schematic","get_materials","get_groups","get_where","material_action","link_claim"]}}
+{"t":"res","id":1,"ok":true,"out":{"mod":"1.0.0+1.21.11","protocol":1,"schematics":3,"materials_enabled":true,"coordinates_hidden":false,"queued_events":0,"ops":["ping","list_schematics","get_schematic","get_materials","get_groups","get_shopping_list","get_where","material_action","link_claim"]}}
 ```
 
 ### `list_schematics`
@@ -127,6 +127,28 @@ names last, alphabetically; only groups with at least one item appear.
 ]}}
 ```
 
+Same errors as `get_materials`.
+
+### `get_shopping_list`
+
+What is still missing, grouped, with the remaining count as shulker boxes +
+stacks + items and a ready-made plain-text version. Optional `"group"` keeps
+one group only. Items that are complete are left out; an empty `lines` means
+nothing is left.
+
+```json
+{"t":"ext","id":10,"ns":"cytra-syncmatica","v":1,"op":"get_shopping_list","payload":{"schematic":"Iron farm"}}
+```
+```json
+{"t":"res","id":10,"ok":true,"out":{"schematic_id":"8f2a6c1e-1b2c-4d3e-9f00-112233445566","schematic":"Iron farm","summary":{"available":true,"items":5,"required":138,"gathered":40,"remaining":98,"percent":29.0,"complete":false,"groups":3},"total_items":98,"total_lines":4,"shulker_boxes":4,"lines":[
+  {"item":"minecraft:stone","group":"Stone","remaining":60,"stack_size":64,"text":"60"},
+  {"item":"minecraft:stone_slab","group":"Stone","remaining":6,"stack_size":64,"text":"6"},
+  {"item":"minecraft:oak_planks","group":"Wood","remaining":20,"stack_size":64,"text":"20"},
+  {"item":"minecraft:oak_door","group":"Wood","remaining":2,"stack_size":64,"text":"2"}
+],"text":"Shopping list for Iron farm\n98 items in 4 lines, about 4 shulker boxes\n\n== Stone ==\n  stone ... "}}
+```
+
+`shulker_boxes` counts whole boxes per item (each item boxed separately).
 Same errors as `get_materials`.
 
 ### `get_where`
@@ -289,6 +311,6 @@ Live changes: `/cytra-syncmatica config set bridge <key> <value>`.
 ## Not yet in this version
 
 Projects (`list_projects`, `get_project`, project targets),
-`get_shopping_list`, `get_layers`, `get_preview` and the `layer_completed`,
+`get_layers`, `get_preview` and the `layer_completed`,
 `project_completed` events are added by the Step 3 extras and documented here
 as they land. Until then they answer `unknown op <op>`.

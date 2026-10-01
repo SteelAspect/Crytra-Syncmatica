@@ -60,6 +60,7 @@ public final class SyncmaticaCommand {
                 .then(configArgument())
                 .then(exportArgument())
                 .then(whereArgument())
+                .then(shoppingArgument())
                 .then(linkArgument())
                 .then(projectArgument());
         dispatcher.register(root);
@@ -128,6 +129,77 @@ public final class SyncmaticaCommand {
                 reply.run();
             }
         });
+        return 1;
+    }
+
+    private static LiteralArgumentBuilder<ServerCommandSource> shoppingArgument() {
+        return CommandManager.literal("shopping")
+                .then(CommandManager.argument("schematic", greedyString())
+                        .suggests(SyncmaticaCommand::suggestPlacementNames)
+                        .executes(SyncmaticaCommand::handleShopping));
+    }
+
+    private static final int SHOPPING_CHAT_LINES = 15;
+
+    /** What is still missing, grouped, with a click-to-copy of the full text. Trailing "group:<name>" filters. */
+    private static int handleShopping(final CommandContext<ServerCommandSource> context) {
+        final Context syncmaticaContext = Syncmatica.getContext(Syncmatica.SERVER_CONTEXT);
+        if (syncmaticaContext == null || syncmaticaContext.getMaterialTracking() == null) {
+            context.getSource().sendError(literal("Material tracking is unavailable"));
+            return 0;
+        }
+        String name = context.getArgument("schematic", String.class);
+        String group = null;
+        final int at = name.lastIndexOf(" group:");
+        if (at > 0) {
+            group = name.substring(at + " group:".length()).trim();
+            name = name.substring(0, at).trim();
+        }
+        final Optional<ServerPlacement> found = findPlacementByName(syncmaticaContext, name);
+        if (found.isEmpty()) {
+            context.getSource().sendError(literal("Unknown shared schematic: " + name));
+            return 0;
+        }
+        final com.steelaspect.cytrasyncmatica.materials.MaterialList list = syncmaticaContext.getMaterialTracking().getList(found.get());
+        if (list == null) {
+            final String error = syncmaticaContext.getMaterialTracking().getExtractionError(found.get().getId());
+            context.getSource().sendError(literal(error == null ? "No material list yet for " + found.get().getName() : error));
+            return 0;
+        }
+        final List<com.steelaspect.cytrasyncmatica.materials.ShoppingList.Line> lines =
+                com.steelaspect.cytrasyncmatica.materials.ShoppingList.build(list, null,
+                        com.steelaspect.cytrasyncmatica.service.MaterialTrackingService::stackSizeOf, group);
+        final String title = found.get().getName() + (group == null ? "" : " (" + group + ")");
+        final String full = com.steelaspect.cytrasyncmatica.materials.ShoppingList.toText(title, lines);
+        final ServerCommandSource source = context.getSource();
+        if (lines.isEmpty()) {
+            source.sendFeedback(() -> literal("Nothing left to gather for " + title), false);
+            return 1;
+        }
+        source.sendFeedback(() -> Text.literal("Shopping list for " + title + ": ").formatted(net.minecraft.util.Formatting.GOLD)
+                .append(Text.literal(com.steelaspect.cytrasyncmatica.materials.ShoppingList.totalItems(lines) + " items, about "
+                        + com.steelaspect.cytrasyncmatica.materials.ShoppingList.totalShulkers(lines) + " shulker boxes ").formatted(net.minecraft.util.Formatting.GRAY))
+                .append(Text.literal("[copy all]").setStyle(net.minecraft.text.Style.EMPTY
+                        .withColor(net.minecraft.util.Formatting.AQUA)
+                        .withClickEvent(new net.minecraft.text.ClickEvent.CopyToClipboard(full))
+                        .withHoverEvent(new net.minecraft.text.HoverEvent.ShowText(Text.literal("Copy the whole list to the clipboard"))))), false);
+        String current = null;
+        int shown = 0;
+        for (final com.steelaspect.cytrasyncmatica.materials.ShoppingList.Line l : lines) {
+            if (shown++ >= SHOPPING_CHAT_LINES) {
+                final int more = lines.size() - SHOPPING_CHAT_LINES;
+                source.sendFeedback(() -> literal("  … and " + more + " more (click [copy all] above)"), false);
+                break;
+            }
+            if (!l.group().equals(current)) {
+                current = l.group();
+                final String g = current;
+                source.sendFeedback(() -> Text.literal("  " + g).formatted(net.minecraft.util.Formatting.YELLOW), false);
+            }
+            source.sendFeedback(() -> Text.literal("    " + com.steelaspect.cytrasyncmatica.materials.ShoppingList.prettyName(l.itemId()) + ": ")
+                    .append(Text.literal(l.text()).formatted(net.minecraft.util.Formatting.WHITE))
+                    .append(Text.literal(" (" + l.remaining() + ")").formatted(net.minecraft.util.Formatting.DARK_GRAY)), false);
+        }
         return 1;
     }
 

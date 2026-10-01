@@ -13,6 +13,7 @@ What it does:
 - `/schematic list`, `/schematic info <name>`, `/schematic where <name>` (coordinates hidden when the server says so)
 - `/schematic materials <name> [missing_only] [group]`: the shared list as an embed with a select menu to pick an item, a second select to filter by material group (Stone, Wood, Redstone, ...), buttons **+1 / +16 / +64 / Set… / Mark complete / Reset**, paging, and a missing-only toggle. Every press counts as *your* linked Minecraft player, with that player's in-game permissions; a refusal (not permitted, unknown item) is shown only to you.
 - `/schematic groups <name>`: progress per material group
+- `/schematic shopping <name> [group] [as_file]`: what is still missing as shulkers + stacks + items, grouped; long lists (or `as_file`) come as a text file
 - `/materials <schematic> <item> <amount>`: quick add without the buttons
 - `/link <code>`, `/unlink`, `/whoami`, `/links`: account linking. In game, run `/cytra-syncmatica link` to get a one-time code.
 - A feed channel: shared schematics, item/group/schematic completions, and **one "materials" message per schematic that is edited in place** as the team gathers (also after a reconnect, via the mod's `resync`). Message ids are stored in SQLite so restarts keep editing the same messages.

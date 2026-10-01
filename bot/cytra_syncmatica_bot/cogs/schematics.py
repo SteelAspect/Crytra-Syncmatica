@@ -6,6 +6,7 @@ to the person who pressed the button."""
 
 from __future__ import annotations
 
+import io
 import logging
 import math
 
@@ -267,6 +268,45 @@ class Schematics(commands.Cog):
         await interaction.followup.send(embed=ui.groups_embed(out.get("schematic", name), self.cfg.server.name,
                                                               out.get("summary") or {}, list(out.get("groups") or [])),
                                         allowed_mentions=ui.NO_MENTIONS)
+
+    @schematic.command(name="shopping", description="What is still missing, as shulkers + stacks + items, grouped")
+    @app_commands.describe(name="Schematic name", group="Only one material group (Stone, Wood, ...)",
+                           as_file="Always attach the list as a text file")
+    @app_commands.autocomplete(name=schematic_autocomplete)
+    async def shopping(self, interaction: discord.Interaction, name: str, group: str | None = None, as_file: bool = False) -> None:
+        await interaction.response.defer()
+        req = {"schematic": name}
+        if group:
+            req["group"] = group
+        out = await self.bot.ext("get_shopping_list", req)
+        text = out.get("text") or ""
+        title = out.get("schematic", name) + (f" · {out['group']}" if out.get("group") else "")
+        lines = list(out.get("lines") or [])
+        e = discord.Embed(title=f"Shopping list: {title}", colour=ui.Palette.GOLD if lines else ui.Palette.OK)
+        e.set_author(name=self.cfg.server.name)
+        if not lines:
+            e.description = "Nothing left to gather."
+            await interaction.followup.send(embed=e)
+            return
+        e.description = (f"**{out.get('total_items', 0):,}** items in {out.get('total_lines', len(lines))} lines · "
+                         f"about **{out.get('shopping_boxes', out.get('shulker_boxes', 0))}** shulker boxes")
+        body = "\n".join(f"**{l['group']}** · {ui.item_name(l['item'])}: `{l['text']}` ({l['remaining']:,})" for l in lines)
+        if as_file or len(body) > 3500 or len(lines) > 40:
+            e.add_field(name="List", value="attached as a text file (too long for one message)", inline=False)
+            fname = f"shopping-{out.get('schematic', name).replace(' ', '_')}.txt"
+            await interaction.followup.send(embed=e, file=discord.File(io.BytesIO(text.encode("utf-8")), filename=fname))
+            return
+        current = None
+        chunk: list[str] = []
+        for l in lines:
+            if l["group"] != current:
+                if chunk:
+                    e.add_field(name=current, value="\n".join(chunk)[:1024], inline=False)
+                current, chunk = l["group"], []
+            chunk.append(f"▫️ {ui.item_name(l['item'])}: `{l['text']}` ({l['remaining']:,})")
+        if chunk:
+            e.add_field(name=current, value="\n".join(chunk)[:1024], inline=False)
+        await interaction.followup.send(embed=e)
 
     @schematic.command(name="where", description="Dimension and coordinates of a shared schematic")
     @app_commands.describe(name="Schematic name")

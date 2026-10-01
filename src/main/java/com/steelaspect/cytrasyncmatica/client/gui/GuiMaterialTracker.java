@@ -107,6 +107,11 @@ public class GuiMaterialTracker extends GuiListBase<MaterialEntry, WidgetMateria
             final int n = MaterialTrackerClient.getInstance().addFromInventory(schematic);
             addMessage(Message.MessageType.INFO, "cytra-syncmatica.gui.message.added_from_inventory", n);
         });
+        x = addTopButton(x, StringUtils.translate("cytra-syncmatica.gui.button.shopping_list"), (b, m) -> {
+            final GuiShoppingList gui = new GuiShoppingList(schematic);
+            gui.setParent(this);
+            openGui(gui);
+        });
         x = addTopButton(x, StringUtils.translate("cytra-syncmatica.gui.button.export"), (b, m) -> exportLocal());
         x = addTopButton(x, StringUtils.translate("cytra-syncmatica.gui.button.refresh"), (b, m) -> {
             MaterialTrackerClient.getInstance().refresh(schematic);

@@ -135,5 +135,12 @@
   "cytra-syncmatica.gui.label.hotkey.material_hud": "Toggle material HUD",
   "cytra-syncmatica.hotkey.toggle_material_hud.comment": "Shows or hides the pinned-materials overlay",
   "cytra-syncmatica.gui.button.group": "Group: %s",
-  "cytra-syncmatica.gui.label.group.all": "All"
+  "cytra-syncmatica.gui.label.group.all": "All",
+  "cytra-syncmatica.gui.title.shopping_list": "Shopping list",
+  "cytra-syncmatica.gui.button.shopping_list": "Shopping list",
+  "cytra-syncmatica.gui.button.copy": "Copy to clipboard",
+  "cytra-syncmatica.gui.button.subtract_inventory": "Minus inventory: %s",
+  "cytra-syncmatica.gui.message.copied": "Shopping list copied to the clipboard",
+  "cytra-syncmatica.gui.label.nothing_to_gather": "Nothing left to gather",
+  "cytra-syncmatica.gui.label.shopping_summary": "%d items in %d lines · about %d shulker boxes"
 }

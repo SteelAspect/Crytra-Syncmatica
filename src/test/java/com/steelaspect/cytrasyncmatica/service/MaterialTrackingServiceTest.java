@@ -136,7 +136,7 @@ final class MaterialTrackingServiceTest {
             context.startup();
             final MaterialTrackingService materials = context.getMaterialTracking();
             materials.setResolver(RESOLVER);
-            final List<String> events = new ArrayList<>();
+            final List<String> events = java.util.Collections.synchronizedList(new ArrayList<>());
             materials.addListener(new MaterialEventListener() {
                 @Override
                 public void onListCreated(final ServerPlacement p, final MaterialList l) {
@@ -171,13 +171,13 @@ final class MaterialTrackingServiceTest {
             context.getSyncmaticManager().addPlacement(placement);
 
             final long deadline = System.currentTimeMillis() + 10_000L;
-            while (System.currentTimeMillis() < deadline && (materials.getList(placement) == null || materials.getList(placement).isEmpty())) {
+            while (System.currentTimeMillis() < deadline && !events.contains("created")) {
                 Thread.sleep(10L);
             }
             final MaterialList list = materials.getList(placement);
             assertNotNull(list);
             assertEquals(20, list.get("minecraft:stone").getRequired());
-            assertTrue(events.contains("created"));
+            assertTrue(events.contains("created"), "list built within 10 s");
             assertEquals("Stone", list.get("minecraft:stone").getGroup());
             assertEquals("Wood", list.get("minecraft:oak_door").getGroup());
             assertEquals("Floor", list.get("minecraft:stone_slab").getGroup(), "groups.json override applied");

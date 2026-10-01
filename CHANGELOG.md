@@ -124,7 +124,13 @@ config, the UI, the lang files, the docs and the build:
   group's progress; the search box also matches group names; exports carry a
   `group` column. Bridge: `get_groups`, a `group` filter on `get_materials`,
   `group` on every item, a `group_completed` event.
+- Shopping list (Step 3.2): what is still missing as shulker boxes + stacks
+  + items, grouped by material group. In game: `/cytra-syncmatica shopping
+  <schematic> [group:<name>]` with a click-to-copy of the full text; on the
+  client a "Shopping list" screen (minus what you carry, group filter, copy
+  to clipboard, export to `config/cytra-syncmatica/exports/<name>-shopping.txt`).
+  Bridge: `get_shopping_list`.
 - Standalone Discord bot in `bot/` (own application, config, SQLite):
   `/link`, `/unlink`, `/whoami`, `/links`, `/schematic list|info|materials|where`,
-  `/schematic groups`, `/materials`, a group filter in the materials view,
+  `/schematic groups`, `/schematic shopping`, `/materials`, a group filter in the materials view,
   live feed channel.

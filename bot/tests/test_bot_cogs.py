@@ -96,6 +96,31 @@ async def test_materials_view_buttons_send_the_linked_uuid_and_show_refusals_pri
         await shutdown(bot, server)
 
 
+async def test_shopping_command_groups_lines_and_attaches_a_file_when_asked():
+    bot, server, ext = await make_bot()
+    try:
+        ext.items["minecraft:glass"][1] = 10
+        cog = Schematics(bot)
+        it = FakeInteraction(make_member(1), bot)
+        await cog.shopping.callback(cog, it, "Iron farm")
+        embed = it.followup.sent[-1]["embed"]
+        assert embed.title == "Shopping list: Iron farm" and "**128**" in embed.description
+        assert [f.name for f in embed.fields] == ["Stone", "Wood"], "glass is complete, so no Glass section"
+        assert "stone: `100`" in embed.fields[0].value
+        it = FakeInteraction(make_member(1), bot)
+        await cog.shopping.callback(cog, it, "Iron farm", group="Wood", as_file=True)
+        sent = it.followup.sent[-1]
+        assert sent["embed"].title == "Shopping list: Iron farm · Wood" and sent["file"].filename == "shopping-Iron_farm.txt"
+        assert b"Shopping list for Iron farm" in sent["file"].fp.read()
+        for item in ext.items.values():
+            item[1] = item[0]
+        it = FakeInteraction(make_member(1), bot)
+        await cog.shopping.callback(cog, it, "Iron farm")
+        assert it.followup.sent[-1]["embed"].description == "Nothing left to gather."
+    finally:
+        await shutdown(bot, server)
+
+
 async def test_groups_command_lists_progress_per_group():
     bot, server, ext = await make_bot()
     try:
