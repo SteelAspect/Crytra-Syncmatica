@@ -1,6 +1,7 @@
 plugins {
     id 'fabric-loom' version '1.17.21'
     id 'maven-publish'
+    id 'com.modrinth.minotaur' version '2.10.0'
 }
 
 version = "${project.mod_version}+${project.minecraft_version}"
@@ -123,5 +124,28 @@ publishing {
         mavenJava(MavenPublication) {
             artifact(remapJar) { builtBy remapJar }
         }
+    }
+}
+
+// Modrinth upload: `./gradlew modrinth` with the MODRINTH_TOKEN environment variable set (a Modrinth token with the
+// CREATE_VERSION scope). Changelog text comes from -Pchangelog="..."; add -PmodrinthDryRun to print the upload
+// without sending it. Fails if this version number is already on Modrinth.
+modrinth {
+    projectId = project.modrinth_project
+    versionNumber = project.version.toString()
+    versionName = "Cytra-Syncmatica ${project.mod_version}"
+    uploadFile = remapJar
+    gameVersions = [project.minecraft_version]
+    loaders = ['fabric']
+    changelog = project.findProperty('changelog') ?: "Cytra-Syncmatica ${project.mod_version}"
+    debugMode = project.hasProperty('modrinthDryRun')
+    dependencies {
+        required.project 'fabric-api'
+        // Client-side only (fabric.mod.json recommends): a server doesn't need them.
+        optional.project 'litematica'
+        optional.project 'malilib'
+        // Same network channels; refuses to load next to either.
+        incompatible.project 'syncmatica'
+        incompatible.project 'syncmatica-revolution'
     }
 }
